@@ -1,13 +1,14 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
+  loader: () => {
+    // Redirigir automáticamente al dashboard
+    throw redirect({ to: "/dashboard" });
+  },
   component: Index,
 });
 
 function Index() {
-  return (
-    <div className="p-2">
-      <h3>Welcome Home!</h3>
-    </div>
-  );
+  // Esta función nunca se ejecutará porque siempre redirige
+  return null;
 }

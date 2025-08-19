@@ -26,10 +26,20 @@ import ListItemText from "@mui/material/ListItemText";
 import InboxIcon from "@mui/icons-material/MoveToInbox";
 import MailIcon from "@mui/icons-material/Mail";
 import InventoryIcon from "@mui/icons-material/Inventory";
+import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import { Outlet } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
+import { createLink } from "@tanstack/react-router";
+import { Link as MUILink } from "@mui/material";
+import { useSuspenseQuery, type QueryClient } from "@tanstack/react-query";
+import { fetchSession } from "@/queries/session";
+import { useNavigate } from "@tanstack/react-router";
+import { colors } from "@/styles/colors";
+import { useAuth } from "@/hooks/useAuth";
+
 const drawerWidth = 240;
+const drawerClosedWidth = 60;
 
 const Main = styled("main", { shouldForwardProp: (prop) => prop !== "open" })<{
   open?: boolean;
@@ -40,7 +50,7 @@ const Main = styled("main", { shouldForwardProp: (prop) => prop !== "open" })<{
     easing: theme.transitions.easing.sharp,
     duration: theme.transitions.duration.leavingScreen,
   }),
-  // marginLeft: `-${drawerWidth}px`,
+  marginLeft: drawerClosedWidth,
   variants: [
     {
       props: ({ open }) => open,
@@ -49,7 +59,7 @@ const Main = styled("main", { shouldForwardProp: (prop) => prop !== "open" })<{
           easing: theme.transitions.easing.easeOut,
           duration: theme.transitions.duration.enteringScreen,
         }),
-        marginLeft: 240,
+        marginLeft: drawerWidth,
       },
     },
   ],
@@ -66,6 +76,9 @@ const AppBar = styled(MuiAppBar, {
     easing: theme.transitions.easing.sharp,
     duration: theme.transitions.duration.leavingScreen,
   }),
+  width: `calc(100% - ${drawerClosedWidth}px)`,
+  marginLeft: `${drawerClosedWidth}px`,
+  backgroundColor: colors.secondary.var95,
   variants: [
     {
       props: ({ open }) => open,
@@ -90,13 +103,6 @@ const DrawerHeader = styled("div")(({ theme }) => ({
   justifyContent: "flex-end",
 }));
 
-import { createLink } from "@tanstack/react-router";
-import { Link as MUILink } from "@mui/material";
-import { useSuspenseQuery, type QueryClient } from "@tanstack/react-query";
-import { fetchSession } from "@/queries/session";
-import { authClient } from "@/lib/auth-client";
-import { useNavigate } from "@tanstack/react-router";
-
 const CustomLink = createLink(MUILink);
 
 export const LayoutComponent = ({
@@ -119,103 +125,101 @@ export const LayoutComponent = ({
   };
 
   const handleLogout = async () => {
-    // Implement logout logic here
-    console.log("Logout clicked");
-    await authClient.signOut({
-      fetchOptions: {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ["session"] });
+    try {
+      console.log("Logout clicked");
+      
+      const API_WHATSAPP_URL = import.meta.env.VITE_API_WHATSAPP_URL || "http://localhost:3000";
+      
+      // Hacer logout en el servidor
+      const response = await fetch(`${API_WHATSAPP_URL}/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
         },
-      },
-    });
-    navigate({ to: "/login" });
+      });
+
+      if (!response.ok) {
+        console.error("Error during logout");
+      }
+
+      // Limpiar localStorage
+      localStorage.removeItem("access_token");
+
+      // Limpiar la caché de React Query
+      queryClient.invalidateQueries({ queryKey: ["session"] });
+      queryClient.removeQueries({ queryKey: ["session"] });
+      
+      // Redirigir al login
+      navigate({ to: "/login" });
+    } catch (error) {
+      console.error("Logout failed:", error);
+      // Aún así redirigir al login
+      localStorage.removeItem("access_token");
+      navigate({ to: "/login" });
+    }
   };
 
   const { data: session, isPending } = useSuspenseQuery(fetchSession());
+  const { user } = useAuth();
 
   const menuItems = useMemo(
-    () => [
-      {
-        text: "Home",
-        icon: <InboxIcon />,
-        to: "/",
-      },
-      {
-        text: "About",
-        icon: <MailIcon />,
-        to: "/about",
-      },
-      {
-        text: "Parametros",
-        icon: <InventoryIcon />,
-        to: "/parametros",
-      },
-      {
-        text: "Cargas",
-        icon: <InventoryIcon />,
-        to: "/cargas",
-      },
-      {
-        text: "Starred",
-        icon: <InboxIcon />,
-        to: "/starred",
-      },
-      {
-        text: "Send email",
-        icon: <MailIcon />,
-        to: "/send-email",
-      },
-      {
-        text: "Drafts",
-        icon: <MailIcon />,
-        to: "/drafts",
-      },
-    ],
-    [],
+    () => {
+      const baseItems = [
+        {
+          text: "Dashboard",
+          icon: <InboxIcon />,
+          to: "/dashboard",
+        },
+        // {
+        //   text: "Home",
+        //   icon: <InboxIcon />,
+        //   to: "/",
+        // },
+        // {
+        //   text: "About",
+        //   icon: <MailIcon />,
+        //   to: "/about",
+        // },
+        // {
+        //   text: "Parametros",
+        //   icon: <InventoryIcon />,
+        //   to: "/parametros",
+        // },
+        // {
+        //   text: "Cargas",
+        //   icon: <InventoryIcon />,
+        //   to: "/cargas",
+        // },
+      ];
+
+      // Agregar elementos para admin
+      if (user?.role === 'admin') {
+        baseItems.push({
+          text: "Administración",
+          icon: <AdminPanelSettingsIcon />,
+          to: "/admin",
+        });
+      }
+
+      return baseItems;
+    },
+    [user?.role]
   );
 
-  const handleDrawerOpen = () => {
+  const handleDrawerEnter = () => {
     setOpen(true);
   };
 
-  const handleDrawerClose = () => {
+  const handleDrawerLeave = () => {
     setOpen(false);
   };
-
-  const toggleDrawer = () => setOpen((prev) => !prev);
 
   return (
     <Box sx={{ flexGrow: 1 }}>
       <CssBaseline />
       <AppBar position="static" open={open}>
         <Toolbar>
-          <IconButton
-            color="inherit"
-            aria-label="open drawer"
-            onClick={toggleDrawer}
-            edge="start"
-            sx={[
-              {
-                mr: 2,
-              },
-              // open && { display: "none" },
-            ]}
-          >
-            <MenuIcon />
-          </IconButton>
-          <Typography
-            variant="h6"
-            component="a"
-            sx={{
-              flexGrow: 1,
-              display: { xs: "none", md: "flex" },
-              color: "inherit",
-              textDecoration: "none",
-            }}
-            href="/"
-          >
-            Backoffice Elecciones
-          </Typography>
           {!isPending && session ? (
             <div>
               <IconButton
@@ -255,40 +259,104 @@ export const LayoutComponent = ({
       </AppBar>
       <Drawer
         sx={{
-          width: drawerWidth,
+          width: open ? drawerWidth : drawerClosedWidth,
           flexShrink: 0,
+          whiteSpace: "nowrap",
+          transition: (theme) =>
+            theme.transitions.create("width", {
+              easing: theme.transitions.easing.sharp,
+              duration: theme.transitions.duration.enteringScreen,
+            }),
           "& .MuiDrawer-paper": {
-            width: drawerWidth,
+            width: open ? drawerWidth : drawerClosedWidth,
+            transition: (theme) =>
+              theme.transitions.create("width", {
+                easing: theme.transitions.easing.sharp,
+                duration: theme.transitions.duration.enteringScreen,
+              }),
+            overflowX: "hidden",
             boxSizing: "border-box",
           },
         }}
-        variant="persistent"
+        variant="permanent" // Cambio: siempre visible
         anchor="left"
         open={open}
-        onClose={handleDrawerClose}
+        onMouseEnter={handleDrawerEnter}
+        onMouseLeave={handleDrawerLeave}
       >
         <DrawerHeader>
-          <IconButton onClick={handleDrawerClose}>
-            {theme.direction === "ltr" ? (
-              <ChevronLeftIcon />
-            ) : (
-              <ChevronRightIcon />
-            )}
-          </IconButton>
+          {open ? (
+            // Logo completo cuando está abierto
+            <Box sx={{ display: "flex", alignItems: "center", flexGrow: 1 }}>
+              <img
+                src="/images/logo_correos.svg"
+                alt="Correos Chile"
+                style={{
+                  height: "22px",
+                  width: "auto",
+                  marginRight: "16px",
+                }}
+              />
+            </Box>
+          ) : (
+            // Logo pequeño cuando está cerrado
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "100%",
+              }}
+            >
+              <img
+                src="/images/iso_correos.svg"
+                alt="Correos Chile"
+                style={{
+                  height: "20px",
+                  width: "auto",
+                }}
+              />
+            </Box>
+          )}
+
+          {open && (
+            <IconButton onClick={handleDrawerLeave}>
+              {theme.direction === "ltr" ? (
+                <ChevronLeftIcon />
+              ) : (
+                <ChevronRightIcon />
+              )}
+            </IconButton>
+          )}
         </DrawerHeader>
         <Divider />
         <List>
           {menuItems.map((item) => (
             <ListItem key={item.text} disablePadding>
-              <ListItemButton component={CustomLink} to={item.to}>
-                <ListItemIcon>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.text} />
+              <ListItemButton
+                component={CustomLink}
+                to={item.to}
+                sx={{
+                  minHeight: 48,
+                  justifyContent: open ? "initial" : "center",
+                  px: 2.5,
+                }}
+              >
+                <ListItemIcon
+                  sx={{
+                    minWidth: 0,
+                    mr: open ? 3 : "auto",
+                    justifyContent: "center",
+                  }}
+                >
+                  {item.icon}
+                </ListItemIcon>
+                {open && <ListItemText primary={item.text} />}
               </ListItemButton>
             </ListItem>
           ))}
         </List>
         <Divider />
-        <List></List>
       </Drawer>
       <Main open={open}>
         <Outlet />

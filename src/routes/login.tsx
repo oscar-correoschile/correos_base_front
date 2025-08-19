@@ -1,7 +1,6 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, redirect } from "@tanstack/react-router";
 import { z } from "zod";
 import { authClient } from "@/lib/auth-client";
-
 import { styled } from "@mui/material/styles";
 import Box from "@mui/material/Box";
 import Checkbox from "@mui/material/Checkbox";
@@ -14,92 +13,179 @@ import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import Stack from "@mui/material/Stack";
 import MuiCard from "@mui/material/Card";
-import ForgotPassword from "@/components/ForgotPassword";
+import Paper from "@mui/material/Paper";
 import Alert from "@mui/material/Alert";
+import { InputAdornment, IconButton } from "@mui/material";
+import { Email, Visibility, VisibilityOff } from "@mui/icons-material";
 import { useState } from "react";
 import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { fetchSession } from "@/queries/session";
 import { useAppForm } from "@/forms/login";
+import ForgotPassword from "@/components/ForgotPassword";
+import ButtonBase from "@/components/button/button";
+import useBreakpoints from "@/hooks/useBreakpoints";
 
 interface LoginForm {
   email: string;
   password: string;
-  rememberMe: boolean;
 }
 
 export const Route = createFileRoute("/login")({
-  component: RouteComponent,
+  component: LoginForm,
+  loader: async () => {
+    // Verificar si el usuario ya está autenticado
+    const token = localStorage.getItem("access_token");
+    
+    if (token) {
+      try {
+        // Hacer la verificación de sesión directamente
+        const API_WHATSAPP_URL = import.meta.env.VITE_API_WHATSAPP_URL || "http://localhost:3000";
+        const response = await fetch(`${API_WHATSAPP_URL}/auth/check`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const sessionData = await response.json();
+          if (sessionData) {
+            // Si ya está autenticado, redirigir al dashboard
+            throw redirect({ to: "/dashboard" });
+          }
+        } else if (response.status === 401 || response.status === 403) {
+          // Solo eliminar el token si es específicamente un error de autenticación
+          console.log("Token expired or invalid, clearing token");
+          localStorage.removeItem("access_token");
+        } else {
+          // Para otros errores HTTP (500, etc.), asumir que el token es válido y redirigir
+          console.log("Server error, but assuming token is valid");
+          throw redirect({ to: "/dashboard" });
+        }
+      } catch (error) {
+        // Si hay error de red u otro, asumir que el token es válido y redirigir
+        if (error instanceof Response) {
+          // Si es un redirect, permitir que se propague
+          throw error;
+        }
+        console.log("Network error, but keeping token and redirecting:", error);
+        throw redirect({ to: "/dashboard" });
+      }
+    }
+    
+    // Si no hay token, permitir acceso al login
+    return null;
+  },
 });
 
-const Card = styled(MuiCard)(({ theme }) => ({
+const Container = styled(Box)({
+  backgroundColor: "#f5f5f5",
+});
+
+const MainBox = styled(Box)({
+  minHeight: "100vh",
   display: "flex",
   flexDirection: "column",
-  alignSelf: "center",
+  justifyContent: "center",
+});
+
+const Logo = styled("img")(({ theme }) => ({
+  display: "block",
+  marginLeft: "auto",
+  marginRight: "auto",
+  marginBottom: "2rem",
+  width: "200px",
+  height: "50px",
+  [theme.breakpoints.down("sm")]: {
+    width: "160px",
+    height: "40px",
+    marginBottom: "1.5rem",
+  },
+}));
+
+const BoxBody = styled(Box)(({ theme }) => ({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "2rem",
+  [theme.breakpoints.down("sm")]: {
+    padding: "1rem",
+    flex: 1,
+    alignItems: "flex-start",
+  },
+  [theme.breakpoints.down(480)]: {
+    padding: "0.5rem",
+  },
+}));
+
+const BoxForm = styled(Paper)(({ theme }) => ({
+  maxWidth: "500px",
   width: "100%",
-  padding: theme.spacing(4),
-  gap: theme.spacing(2),
-  margin: "auto",
-  [theme.breakpoints.up("sm")]: {
-    maxWidth: "450px",
+  padding: "4rem",
+  backgroundColor: "white",
+  borderRadius: "2rem",
+  [theme.breakpoints.down("sm")]: {
+    padding: "2rem 1.5rem",
+    borderRadius: "1.5rem",
+    margin: "0 0.5rem",
+    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
   },
-  boxShadow:
-    "hsla(220, 30%, 5%, 0.05) 0px 5px 15px 0px, hsla(220, 25%, 10%, 0.05) 0px 15px 35px -5px",
-  ...theme.applyStyles("dark", {
-    boxShadow:
-      "hsla(220, 30%, 5%, 0.5) 0px 5px 15px 0px, hsla(220, 25%, 10%, 0.08) 0px 15px 35px -5px",
-  }),
-}));
-
-const SignInContainer = styled(Stack)(({ theme }) => ({
-  height: "calc((1 - var(--template-frame-height, 0)) * 100dvh)",
-  minHeight: "100%",
-  padding: theme.spacing(2),
-  [theme.breakpoints.up("sm")]: {
-    padding: theme.spacing(4),
+  [theme.breakpoints.down(480)]: {
+    padding: "1.5rem 1rem",
+    borderRadius: "1rem",
+    margin: "0 0.25rem",
+    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
   },
-  "&::before": {
-    content: '""',
-    display: "block",
-    position: "absolute",
-    zIndex: -1,
-    inset: 0,
-    backgroundImage:
-      "radial-gradient(ellipse at 50% 50%, hsl(210, 100%, 97%), hsl(0, 0%, 100%))",
-    backgroundRepeat: "no-repeat",
-    ...theme.applyStyles("dark", {
-      backgroundImage:
-        "radial-gradient(at 50% 50%, hsla(210, 100%, 16%, 0.5), hsl(220, 30%, 5%))",
-    }),
+  [theme.breakpoints.down(360)]: {
+    padding: "1rem 0.75rem",
+    margin: "0 0.125rem",
   },
 }));
 
-function RouteComponent() {
+const API_WHATSAPP_URL = import.meta.env.VITE_API_WHATSAPP_URL || "http://localhost:3000";
+
+function LoginForm() {
   const [open, setOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { isMobile } = useBreakpoints();
 
   const { refetch } = useSuspenseQuery(fetchSession());
   const navigate = useNavigate({ from: "/login" });
 
   const mutation = useMutation({
     mutationFn: async (value: LoginForm) => {
-      const { data, error } = await authClient.signIn.email(value);
-      // await authClient.signUp.email({
-      //   email: "dead.time.aa@gmail.com",
-      //   password: "123456.,.",
-      //   name: "Alvaro Abarca",
-      //   callbackURL: "/",
-      // });
-      if (error) {
-        throw new Error(error.message);
+      console.log(import.meta.env);
+      const response = await fetch(`${API_WHATSAPP_URL}/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: value.email,
+          password: value.password,
+        }),
+        // credentials: "include", // Para incluir cookies
+      });
+      console.log("Login response:", response);
+      const data = await response.json();
+      localStorage.setItem("access_token", data.access_token);
+      if (!response.ok) {
+        throw new Error(data.message || "Error de autenticación");
       }
+
       return data;
     },
     onSuccess: async (data) => {
       console.log("Login successful", data);
+      setError(null);
       await refetch();
       navigate({ to: "/" });
     },
     onError: (error) => {
       console.error("Login failed", error);
+      setError("Usuario o contraseña inválidos");
     },
   });
 
@@ -107,20 +193,23 @@ function RouteComponent() {
     defaultValues: {
       email: "",
       password: "",
-      rememberMe: false,
     },
     validators: {
       onChange: z.object({
         email: z.string().email("Email inválido"),
-        password: z.string().min(6, "Contraseña requerida"),
-        rememberMe: z.boolean(),
+        password: z.string().min(1, "Contraseña requerida"),
       }),
     },
     onSubmit: async ({ value, formApi }) => {
+      setError(null);
       await mutation.mutateAsync(value);
       formApi.reset();
     },
   });
+
+  const handleClickShowPassword = () => {
+    setShowPassword(!showPassword);
+  };
 
   const handleClickOpen = () => {
     setOpen(true);
@@ -130,184 +219,173 @@ function RouteComponent() {
     setOpen(false);
   };
 
+  const handleSubmitPasswordRecovery = async (email: string) => {
+    console.log("Password recovery for:", email);
+    setOpen(false);
+  };
+
   return (
-    <div>
+    <Container>
       <CssBaseline enableColorScheme />
-      <SignInContainer direction="column" justifyContent="space-between">
-        {/* <ColorModeSelect
-          sx={{ position: "fixed", top: "1rem", right: "1rem" }}
-        /> */}
-        <Card variant="outlined">
-          {/* <SitemarkIcon /> */}
-          <Typography
-            component="h1"
-            variant="h4"
-            sx={{ width: "100%", fontSize: "clamp(2rem, 10vw, 2.15rem)" }}
-          >
-            Sign in
-          </Typography>
-          <Box
-            component="form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              form.handleSubmit();
-            }}
-            noValidate
-            sx={{
-              display: "flex",
-              flexDirection: "column",
-              width: "100%",
-              gap: 2,
-            }}
-          >
-            <FormControl>
-              <form.AppField
-                name="email"
-                children={(field) => (
-                  <>
-                    <FormLabel htmlFor="email">Email</FormLabel>
-                    <field.TextField
-                      id={field.name}
-                      error={field.state.meta?.errors?.length > 0}
-                      helperText={
-                        field.state.meta?.errors
-                          ? field.state.meta.errors[0]?.message
-                          : ""
-                      }
-                      name={field.name}
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      placeholder="your@email.com"
-                      autoComplete="email"
-                      autoFocus
-                      required
-                      fullWidth
-                      variant="outlined"
-                      color={
-                        field.state.meta?.errors?.length > 0
-                          ? "error"
-                          : "primary"
-                      }
-                    />
-                  </>
-                )}
-              />
-            </FormControl>
-            <FormControl>
-              <form.AppField
-                name="password"
-                children={(field) => (
-                  <>
-                    <FormLabel htmlFor="password">Password</FormLabel>
-                    <field.TextField
-                      id={field.name}
-                      error={field.state.meta?.errors?.length > 0}
-                      helperText={
-                        field.state.meta?.errors
-                          ? field.state.meta.errors[0]?.message
-                          : ""
-                      }
-                      name={field.name}
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      placeholder="••••••"
-                      autoComplete="current-password"
-                      autoFocus
-                      required
-                      fullWidth
-                      variant="outlined"
-                      color={
-                        field.state.meta?.errors?.length > 0
-                          ? "error"
-                          : "primary"
-                      }
-                    />
-                  </>
-                )}
-              />
-            </FormControl>
-            <form.AppField
-              name="rememberMe"
-              children={(field) => (
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      id={field.name}
-                      name={field.name}
-                      checked={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.checked)}
-                      color="primary"
-                    />
-                  }
-                  label="Remember me"
-                />
-              )}
-            />
-            {/* <FormControlLabel
-              control={<Checkbox value="remember" color="primary" />}
-              label="Remember me"
-            /> */}
-            <ForgotPassword open={open} handleClose={handleClose} />
-            {false && (
-              <Alert severity="error">Usuario o contrasena invalidos.</Alert>
-            )}
-            <form.Subscribe
-              selector={(state) => [state.canSubmit, state.isSubmitting]}
-              children={([canSubmit, isSubmitting]) => (
-                <form.SubmitButton
-                  type="submit"
-                  fullWidth
-                  variant="contained"
-                  disabled={!canSubmit || isSubmitting}
-                  loading={isSubmitting}
-                >
-                  {isSubmitting ? "Signing in..." : "Sign in"}
-                </form.SubmitButton>
-              )}
-            />
-            <Link
-              component="button"
-              type="button"
-              onClick={handleClickOpen}
+      <MainBox>
+        <Logo
+          src="/images/logo_correos.svg"
+          alt="Logo Correos Chile"
+        />
+        <BoxBody>
+          <BoxForm elevation={0}>
+            
+            <Typography
               variant="body2"
-              sx={{ alignSelf: "center" }}
+              sx={{
+                color: "#6B7280",
+                textAlign: "center",
+                fontSize: { xs: "0.85rem", sm: "0.875rem" },
+                mb: { xs: 2, sm: 3 },
+                lineHeight: 1.5,
+              }}
             >
-              Forgot your password?
-            </Link>
-          </Box>
-          <Divider>or</Divider>
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {/* <Button
-              fullWidth
-              variant="outlined"
-              onClick={() => alert("Sign in with Google")}
-              startIcon={<GoogleIcon />}
-            >
-              Sign in with Google
-            </Button>
-            <Button
-              fullWidth
-              variant="outlined"
-              onClick={() => alert("Sign in with Facebook")}
-              startIcon={<FacebookIcon />}
-            >
-              Sign in with Facebook
-            </Button> */}
-            <Typography sx={{ textAlign: "center" }}>
-              Don&apos;t have an account?{" "}
-              <Link
-                href="/material-ui/getting-started/templates/sign-in/"
-                variant="body2"
-                sx={{ alignSelf: "center" }}
-              >
-                Sign up
-              </Link>
+              Acceso para usuarios con Keycloak.
             </Typography>
-          </Box>
-        </Card>
-      </SignInContainer>
-    </div>
+            <Box
+              component="form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                form.handleSubmit();
+              }}
+              noValidate
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                width: "100%",
+                gap: 2,
+              }}
+            >
+              <FormControl>
+                <form.AppField
+                  name="email"
+                  children={(field) => (
+                    <>
+                      <field.TextField
+                        id={field.name}
+                        error={field.state.meta?.errors?.length > 0}
+                        helperText={
+                          field.state.meta?.errors
+                            ? field.state.meta.errors[0]?.message
+                            : ""
+                        }
+                        name={field.name}
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        placeholder="Correo electrónico"
+                        autoComplete="email"
+                        autoFocus
+                        required
+                        fullWidth
+                        variant="standard"
+                        sx={{ mb: isMobile ? 2 : 3 }}
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <Email sx={{ color: "#474747", }} />
+                            </InputAdornment>
+                          ),
+                        }}
+                        color={
+                          field.state.meta?.errors?.length > 0
+                            ? "error"
+                            : "primary"
+                        }
+                      />
+                    </>
+                  )}
+                />
+              </FormControl>
+              <FormControl>
+                <form.AppField
+                  name="password"
+                  children={(field) => (
+                    <>
+                      <field.TextField
+                        id={field.name}
+                        type={showPassword ? "text" : "password"}
+                        error={field.state.meta?.errors?.length > 0}
+                        helperText={
+                          field.state.meta?.errors
+                            ? field.state.meta.errors[0]?.message
+                            : ""
+                        }
+                        name={field.name}
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        placeholder="Clave"
+                        autoComplete="current-password"
+                        required
+                        fullWidth
+                        variant="standard"
+                        sx={{ mb: isMobile ? 2 : 3 }}
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton 
+                                onClick={handleClickShowPassword} 
+                                edge="end" 
+                                sx={{ color: "#474747" }}
+                              >
+                                {showPassword ? <VisibilityOff /> : <Visibility />}
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }}
+                        color={
+                          field.state.meta?.errors?.length > 0
+                            ? "error"
+                            : "primary"
+                        }
+                      />
+                    </>
+                  )}
+                />
+              </FormControl>
+
+              <Box sx={{ textAlign: "left", mt: { xs: 2, sm: 4 }, mb: { xs: 1.5, sm: 2 } }}>
+                <ButtonBase
+                  onClick={handleClickOpen}
+                  variant="text"
+                  color="secondary"
+                  startIcon={<img src={'/images/passwordIcon.svg'} width={24} height={24} alt="pwIcon" />}
+                >
+                  Recuperar Contraseña
+                </ButtonBase>
+              </Box>
+
+              {error && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {error}
+                </Alert>
+              )}
+
+              <form.Subscribe
+                selector={(state) => [state.canSubmit, state.isSubmitting]}
+                children={([canSubmit, isSubmitting]) => (
+                  <ButtonBase
+                    type="submit"
+                    fullWidth
+                    variant="contained"
+                    disabled={!canSubmit || isSubmitting}
+                    loading={isSubmitting}
+                    sx={{ mt: 2 }}
+                  >
+                    {isSubmitting ? "Iniciando sesión..." : "Continuar"}
+                  </ButtonBase>
+                )}
+              />
+            </Box>
+          </BoxForm>
+        </BoxBody>
+      </MainBox>
+    </Container>
   );
 }

@@ -3,23 +3,34 @@ import {
   Link,
   Outlet,
   redirect,
+  useLocation,
 } from "@tanstack/react-router";
 import { useSuspenseQuery, type QueryClient } from "@tanstack/react-query";
 import { LayoutComponent } from "../layouts/main";
 import MuiLink from "@mui/material/Link";
-
-// import { fetchSession } from "@/queries/session";
+import { fetchSession } from "@/queries/session";
+import { isPublicRoute } from "@/config/routes";
 
 interface Context {
   queryClient: QueryClient;
 }
+
 export const Route = createRootRouteWithContext<Context>()({
   component: RootComponent,
-  loader: async ({ context: _context }) => {
-    // const data = await context.queryClient.ensureQueryData(fetchSession());
-    // if (!data && location.pathname !== "/login") {
-    //   throw redirect({ to: "/login" });
-    // }
+  loader: async ({ context, location }) => {
+
+    const isPublic = isPublicRoute(location.pathname);
+
+    if (!isPublic) {
+      try {
+        const sessionData = await context.queryClient.ensureQueryData(fetchSession());
+        if (!sessionData) {
+          throw redirect({ to: "/login" });
+        }
+      } catch (error) {
+        throw redirect({ to: "/login" });
+      }
+    }
   },
 
   notFoundComponent: () => {
@@ -35,19 +46,18 @@ export const Route = createRootRouteWithContext<Context>()({
 });
 
 function RootComponent() {
-  // const { data: session, isSuccess } = useSuspenseQuery(fetchSession());
   const queryClient = Route.useRouteContext().queryClient;
+  const location = useLocation();
+  
+  const isPublic = isPublicRoute(location.pathname);
 
   return (
     <>
-      <LayoutComponent queryClient={queryClient} />
-      {/*<Outlet />*/}
-      {/*{isSuccess && session ? (
-        <>
-        </>
+      {!isPublic ? (
+        <LayoutComponent queryClient={queryClient} />
       ) : (
-
-      )}*/}
+        <Outlet />
+      )}
     </>
   );
 }
