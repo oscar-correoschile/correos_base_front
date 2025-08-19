@@ -70,8 +70,42 @@ const ChatHeader = styled(Box)(({ theme }) => ({
 const MessagesContainer = styled(Box)({
   flex: 1,
   overflow: 'auto',
-  padding: '16px',
+  padding: '0',
   backgroundColor: colors.secondary.var95,
+});
+
+const MessagesContent = styled(Box)({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 1,
+  minHeight: '100%',
+  padding: '16px',
+  // backgroundImage: 'url(/images/fondo-correos-chat.jpeg)',
+  backgroundRepeat: 'repeat',
+  backgroundSize: '200px',
+  backgroundPosition: 'left top',
+  position: 'relative',
+  '&::before': {
+    content: '""',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundImage: 'url(/images/fondo-correos-chat.jpeg)',
+    backgroundRepeat: 'repeat',
+    backgroundSize: '400px',
+    backgroundPosition: 'left top',
+    backgroundAttachment: 'fixed',
+    opacity: 0.05,
+    filter: 'grayscale(100%)',
+    zIndex: 0,
+    PointerEvent: 'none'
+  },
+  '& > *': {
+    position: 'relative',
+    zIndex: 1,
+  },
 });
 
 const MessageBubble = styled(Paper)<{ isFromAgent?: boolean; isFromBot?: boolean }>(({ theme, isFromAgent, isFromBot }) => ({
@@ -294,7 +328,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ contact, messages, onSendMessage })
 
       {/* Área de mensajes */}
       <MessagesContainer>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <MessagesContent>
           {processedMessages.map((message) => (
             <React.Fragment key={message.id}>
               {message.isTransferred && (
@@ -348,7 +382,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ contact, messages, onSendMessage })
           ))}
           {/* ✅ Elemento para hacer scroll automático al final */}
           <div ref={messagesEndRef} />
-        </Box>
+        </MessagesContent>
         
       </MessagesContainer>
 
