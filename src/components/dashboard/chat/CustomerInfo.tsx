@@ -14,14 +14,25 @@ import { styled } from '@mui/material/styles';
 import { colors } from '@/styles/colors';
 
 interface Contact {
-  id: string;
-  name: string;
-  lastMessage: string;
-  time: string;
-  status: 'online' | 'away' | 'offline';
-  priority: 'alta' | 'media' | 'baja';
-  unreadCount?: number;
-  avatar?: string;
+  id:          number;
+  executiveId: number;
+  waId:        string;
+  createdAt:   Date;
+  updatedAt:   Date;
+  deletedAt:   null;
+  executive:   Executive;
+}
+
+interface Executive {
+  id:        number;
+  name:      string;
+  email:     string;
+  phone:     string;
+  active:    boolean;
+  available: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: null;
 }
 
 interface CustomerInfoProps {
@@ -79,7 +90,7 @@ const CustomerInfo: React.FC<CustomerInfoProps> = ({ contact }) => {
       <Box sx={{ mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
           <Typography variant="h6" sx={{ color: colors.secondary.var20, fontWeight: 600 }}>
-            {contact.name}
+            {contact.waId}
           </Typography>
           <Button
             variant="text"

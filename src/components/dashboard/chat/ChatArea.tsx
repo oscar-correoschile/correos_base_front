@@ -14,14 +14,25 @@ import { styled } from '@mui/material/styles';
 import { colors } from '@/styles/colors';
 
 interface Contact {
-  id: string;
-  name: string;
-  lastMessage: string;
-  time: string;
-  status: 'online' | 'away' | 'offline';
-  priority: 'alta' | 'media' | 'baja';
-  unreadCount?: number;
-  avatar?: string;
+  id:          number;
+  executiveId: number;
+  waId:        string;
+  createdAt:   Date;
+  updatedAt:   Date;
+  deletedAt:   null;
+  executive:   Executive;
+}
+
+interface Executive {
+  id:        number;
+  name:      string;
+  email:     string;
+  phone:     string;
+  active:    boolean;
+  available: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: null;
 }
 
 // ✅ Nueva interfaz basada en los datos del API
@@ -123,9 +134,9 @@ const MessageBubble = styled(Paper)<{ isFromAgent?: boolean; isFromBot?: boolean
     : isFromBot 
     ? colors.secondary.var30 
     : colors.secondary.var20,
-  alignSelf: isFromAgent ? 'flex-end' : 'flex-start',
-  marginLeft: isFromAgent ? 'auto' : 0,
-  marginRight: isFromAgent ? 0 : 'auto',
+  alignSelf: isFromAgent || isFromBot ? 'flex-end' : 'flex-start',
+  marginLeft: isFromAgent || isFromBot ? 'auto' : 0,
+  marginRight: isFromAgent || isFromBot ? 0 : 'auto',
 }));
 
 const TransferredMessage = styled(Box)(({ theme }) => ({
@@ -163,13 +174,6 @@ const ChatArea: React.FC<ChatAreaProps> = ({ contact, messages, onSendMessage })
     // ✅ CORRECCIÓN: metaTimestamp está en segundos, necesitamos convertir a milisegundos
     const timestampMs = parseInt(apiMessage.metaTimestamp) * 1000;
     const date = new Date(timestampMs);
-    
-    console.log({
-      metaTimestamp: apiMessage.metaTimestamp,
-      timestampMs,
-      date,
-      apiMessage
-    });
     
     const timeString = date.toLocaleTimeString('es-CL', { 
       hour: '2-digit', 
@@ -295,27 +299,15 @@ const ChatArea: React.FC<ChatAreaProps> = ({ contact, messages, onSendMessage })
           
           <Box>
             <Typography variant="h6" sx={{ color: colors.secondary.var20, fontWeight: 600 }}>
-              {contact.name}
+              +{contact.waId}
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box
-                sx={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  backgroundColor: getStatusColor(contact.status),
-                }}
-              />
-              <Typography variant="body2" sx={{ color: colors.secondary.var50 }}>
-                {getStatusText(contact.status)}
-              </Typography>
-            </Box>
+            
           </Box>
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="body2" sx={{ color: colors.secondary.var50 }}>
-            +52 123 455 7890
+             +{contact.waId}
           </Typography>
           {/* <IconButton size="small" sx={{ color: colors.secondary.var50 }}>
             <Phone />
@@ -369,7 +361,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ contact, messages, onSendMessage })
                   variant="caption" 
                   sx={{ 
                     color: colors.secondary.var50,
-                    alignSelf: message.sender === 'agent' ? 'flex-end' : 'flex-start',
+                    alignSelf: message.sender === 'agent' || message.sender === 'bot' ? 'flex-end' : 'flex-start',
                     mt: 0.5,
                     mr: message.sender === 'agent' ? 1 : 0,
                     ml: message.sender === 'customer' || message.sender === 'bot' ? 1 : 0,
