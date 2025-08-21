@@ -6,13 +6,31 @@ import CssBaseline from "@mui/material/CssBaseline";
 
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { theme } from "./muiTheme";
+import { SocketProvider } from "@/hooks/useSocketChat";
 
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 
 import { routeTree } from "./routeTree.gen";
 
-// Create a new router instance
-const queryClient = new QueryClient();
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      refetchOnReconnect: true,
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 30,
+      retry: 2,
+      retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
+    },
+    mutations: {
+      retry: 1,
+    },
+  },
+});
+
 const router = createRouter({
   routeTree,
   context: { queryClient },
@@ -21,14 +39,15 @@ const router = createRouter({
   scrollRestoration: true,
 });
 
-// Register the router instance for type safety
 declare module "@tanstack/react-router" {
   interface Register {
     router: typeof router;
   }
 }
 
-// Render the app
+const API_WHATSAPP_URL = import.meta.env.VITE_API_WHATSAPP_URL || "http://localhost:3000";
+
+
 const rootElement = document.getElementById("root")!;
 if (!rootElement.innerHTML) {
   const root = ReactDOM.createRoot(rootElement);
@@ -37,7 +56,9 @@ if (!rootElement.innerHTML) {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
+          <SocketProvider socketUrl={API_WHATSAPP_URL}>
+            <RouterProvider router={router} />
+          </SocketProvider>
           <ReactQueryDevtools initialIsOpen={false} />
         </QueryClientProvider>
       </ThemeProvider>

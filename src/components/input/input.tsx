@@ -8,32 +8,26 @@ import { styled } from '@mui/material/styles';
 import { formatNumber } from '@/utils/formatNumber';
 
 export interface CampoTextoProps extends Omit<TextFieldProps, 'error' | 'helperText'> {
-  /* value must be a controlled string */
   value: string;
-  /* fired on every change */
   onChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
 
-  /* --- validation rules --- */
   min?: number;
   max?: number;
   minLength?: number;
   maxLength?: number;
 
-  /* UX toggles */
-  markSuccess?: boolean; // green border & helperText when valid
-  hideErrors?: boolean; // skip red border / message
+  markSuccess?: boolean;
+  hideErrors?: boolean;
   variant?: 'standard' | 'filled' | 'outlined';
 }
 
 const StyledFormControl = styled(FormControl)(({ theme }) => ({
   width: '100%',
-  // success state
   '&.success .MuiOutlinedInput-root': {
     '& fieldset': { borderColor: theme.palette.success.main },
     '&:hover fieldset': { borderColor: theme.palette.success.main },
     '&.Mui-focused fieldset': { borderColor: theme.palette.success.main },
   },
-  // error state
   '&.error .MuiOutlinedInput-root fieldset': {
     borderColor: theme.palette.error.main,
   },
@@ -51,7 +45,7 @@ export default function Input({
   variant = 'standard',
   ...textFieldProps
 }: CampoTextoProps) {
-  /* -------- validation -------- */
+
   const numeric = Number(value.replace(/[.,]/g, ''));
   const isNumeric = !Number.isNaN(numeric);
 
