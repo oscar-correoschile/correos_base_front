@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { styled } from "@mui/material/styles";
 import Box from "@mui/material/Box";
 import Drawer from "@mui/material/Drawer";
@@ -12,6 +12,8 @@ import Typography from "@mui/material/Typography";
 import Divider from "@mui/material/Divider";
 import Button from "@mui/material/Button";
 import AccountCircle from "@mui/icons-material/AccountCircle";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import PauseCircleIcon from "@mui/icons-material/PauseCircle";
 import MenuItem from "@mui/material/MenuItem";
 import Menu from "@mui/material/Menu";
 import Avatar from "@mui/material/Avatar";
@@ -28,11 +30,12 @@ import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
 import { createLink } from "@tanstack/react-router";
 import { Link as MUILink } from "@mui/material";
-import { useSuspenseQuery, type QueryClient } from "@tanstack/react-query";
+import { useSuspenseQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { fetchSession } from "@/queries/session";
 import { useNavigate } from "@tanstack/react-router";
 import { colors } from "@/styles/colors";
 import { useAuth } from "@/hooks/useAuth";
+import { executiveAvailable } from "@/api/chatService";
 
 const drawerWidth = 240;
 const drawerClosedWidth = 60;
@@ -108,8 +111,10 @@ export const LayoutComponent = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [isUpdatingAvailability, setIsUpdatingAvailability] = useState(false);
 
   const navigate = useNavigate();
+  const queryClientHook = useQueryClient();
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -119,13 +124,83 @@ export const LayoutComponent = ({
     setAnchorEl(null);
   };
 
+  const handleToggleAvailability = async () => {
+    if (!session?.executive?.id || isUpdatingAvailability) return;
+    
+    setIsUpdatingAvailability(true);
+    try {
+      const newAvailabilityStatus = !session.executive.available;
+
+      // ✅ Actualización optimista INMEDIATA
+      queryClientHook.setQueryData(['session'], (oldSession: any) => {
+        if (!oldSession?.executive) return oldSession;
+        
+        return {
+          ...oldSession,
+          executive: {
+            ...oldSession.executive,
+            available: newAvailabilityStatus,
+            updatedAt: new Date().toISOString() // Actualizar timestamp
+          }
+        };
+      });
+
+      // Llamar al servicio - sabemos que devuelve { message, result }
+      const response = await executiveAvailable(session.executive.id, newAvailabilityStatus);
+      
+
+      // ✅ Actualizar con los datos reales del servidor
+      if (response?.result) {
+        queryClientHook.setQueryData(['session'], (oldSession: any) => {
+          if (!oldSession) return oldSession;
+          
+          return {
+            ...oldSession,
+            executive: {
+              ...oldSession.executive,
+              ...response.result, // Usar todos los datos del servidor
+            }
+          };
+        });
+      }
+      
+    } catch (error) {
+      console.error('❌ Error actualizando disponibilidad:', error);
+      
+      // ✅ Revertir actualización optimista en caso de error
+      queryClientHook.setQueryData(['session'], (oldSession: any) => {
+        if (!oldSession?.executive) return oldSession;
+        
+        return {
+          ...oldSession,
+          executive: {
+            ...oldSession.executive,
+            available: session.executive.available // Revertir al estado original
+          }
+        };
+      });
+      
+      alert('Error al actualizar el estado. Por favor intenta nuevamente.');
+      
+    } finally {
+      setIsUpdatingAvailability(false);
+      handleClose();
+    }
+  };
+
   const handleLogout = async () => {
     try {
-      console.log("Logout clicked");
+
+      if (session?.executive?.id && session.executive.available) {
+        
+        try {
+          await executiveAvailable(session.executive.id, false);
+        } catch (error) {
+          console.warn('⚠️ No se pudo marcar como no disponible antes del logout:', error);
+        }
+      }
       
       const API_WHATSAPP_URL = import.meta.env.VITE_API_WHATSAPP_URL || "http://localhost:3000";
-      
-      // Hacer logout en el servidor
       const response = await fetch(`${API_WHATSAPP_URL}/auth/logout`, {
         method: "POST",
         credentials: "include",
@@ -137,19 +212,14 @@ export const LayoutComponent = ({
       if (!response.ok) {
         console.error("Error during logout");
       }
-
-      // Limpiar localStorage
       localStorage.removeItem("access_token");
 
-      // Limpiar la caché de React Query
       queryClient.invalidateQueries({ queryKey: ["session"] });
       queryClient.removeQueries({ queryKey: ["session"] });
-      
-      // Redirigir al login
+
       navigate({ to: "/login" });
     } catch (error) {
       console.error("Logout failed:", error);
-      // Aún así redirigir al login
       localStorage.removeItem("access_token");
       navigate({ to: "/login" });
     }
@@ -166,26 +236,6 @@ export const LayoutComponent = ({
           icon: <InboxIcon />,
           to: "/dashboard",
         },
-        // {
-        //   text: "Home",
-        //   icon: <InboxIcon />,
-        //   to: "/",
-        // },
-        // {
-        //   text: "About",
-        //   icon: <MailIcon />,
-        //   to: "/about",
-        // },
-        // {
-        //   text: "Parametros",
-        //   icon: <InventoryIcon />,
-        //   to: "/parametros",
-        // },
-        // {
-        //   text: "Cargas",
-        //   icon: <InventoryIcon />,
-        //   to: "/cargas",
-        // },
       ];
 
       // Agregar elementos para admin
@@ -210,7 +260,6 @@ export const LayoutComponent = ({
     setOpen(false);
   };
 
-  // Función para obtener las iniciales del nombre
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -220,17 +269,48 @@ export const LayoutComponent = ({
       .slice(0, 2);
   };
 
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (session?.executive?.id && session.executive.available) {
+        
+        const API_WHATSAPP_URL = import.meta.env.VITE_API_WHATSAPP_URL || "http://localhost:3000";
+        const token = localStorage.getItem("access_token");
+        
+        if (token) {
+          try {
+            fetch(`${API_WHATSAPP_URL}/maintainer/toggle_executive_availability`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                executiveId: session.executive.id,
+                available: false
+              }),
+              keepalive: true
+            }).catch(error => {
+              console.warn('No se pudo marcar como no disponible al cerrar:', error);
+            });
+          } catch (error) {
+            console.warn('Error al marcar como no disponible:', error);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [session?.executive?.id, session?.executive?.available]);
+
   return (
     <Box sx={{ flexGrow: 1 }}>
       <CssBaseline />
       <AppBar position="static" open={open}>
         <Toolbar sx={{ justifyContent: 'space-between' }}>
-          {/* <Typography variant="h6" component="div" sx={{ 
-            color: colors.secondary.var20,
-            fontWeight: 600 
-          }}>
-            Mesa de Ayuda
-          </Typography> */}
           <div></div>
 
           {!isPending && session ? (
@@ -273,24 +353,40 @@ export const LayoutComponent = ({
                   >
                     {session.executive?.name || 'Usuario'}
                   </Typography>
-                  {/* <Chip
-                    label={session.executive?.available ? "Disponible" : "Ocupado"}
+                  <Chip
+                    label={
+                      isUpdatingAvailability 
+                        ? "Actualizando..." 
+                        : session.executive?.available 
+                          ? "Disponible" 
+                          : "No Disponible"
+                    }
                     size="small"
                     sx={{
                       height: '18px',
                       fontSize: '10px',
                       fontWeight: 500,
-                      backgroundColor: session.executive?.available 
-                        ? colors.success.var95 
-                        : colors.warning.var95,
-                      color: session.executive?.available 
-                        ? colors.success.var30 
-                        : colors.warning.var30,
+                      backgroundColor: isUpdatingAvailability
+                        ? colors.secondary.var90
+                        : session.executive?.available 
+                          ? colors.success.var95 
+                          : colors.error.var95,
+                      color: isUpdatingAvailability
+                        ? colors.secondary.var50
+                        : session.executive?.available 
+                          ? colors.success.var30 
+                          : colors.error.var30,
                       '& .MuiChip-label': {
                         px: 1
+                      },
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      '&:hover': {
+                        opacity: 0.8
                       }
                     }}
-                  /> */}
+                    
+                  />
                 </Box>
               </Box>
 
@@ -325,6 +421,29 @@ export const LayoutComponent = ({
                     {session.executive?.email}
                   </Typography>
                 </Box>
+                
+                {/* Estado de disponibilidad */}
+                <MenuItem 
+                  onClick={handleToggleAvailability} 
+                  disabled={isUpdatingAvailability}
+                  sx={{ py: 1.5 }}
+                >
+                  {session.executive?.available ? (
+                    <PauseCircleIcon sx={{ mr: 2, color: colors.error.main }} />
+                  ) : (
+                    <CheckCircleIcon sx={{ mr: 2, color: colors.success.main }} />
+                  )}
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {session.executive?.available ? 'Marcar como No Disponible' : 'Marcar como Disponible'}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: colors.secondary.var50 }}>
+                      Estado actual: {session.executive?.available ? 'Disponible' : 'No Disponible'}
+                    </Typography>
+                  </Box>
+                </MenuItem>
+                
+                <Divider />
                 {/* <MenuItem onClick={handleClose} sx={{ py: 1.5 }}>
                   <AccountCircle sx={{ mr: 2, color: colors.secondary.var50 }} />
                   Perfil

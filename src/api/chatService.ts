@@ -171,18 +171,56 @@ export async function getClosedChats() {
 
 export async function getWaitingChats() {
     console.log('🔍 API: Solicitando chats en espera');
+    
     try {
         const accessToken = getAccessToken();
-        const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/waiting_chats`, {
+        
+        const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/get_waiting`, {
             method: "GET",
-            headers: { "Content-Type": "application/json",
+            headers: { 
+                "Content-Type": "application/json",
                 "Authorization": `Bearer ${accessToken}`
-             },
+            },
         });
-        if (!res.ok) throw new Error("No se pudieron obtener los chats en espera");
-        return res.json();
+        if (!res.ok) {
+            const errorText = await res.text();
+            console.error('❌ Error en respuesta:', errorText);
+            throw new Error(`No se pudieron obtener los chats en espera: ${res.status} - ${errorText}`);
+        }
+        
+        const data = await res.json();
+        console.log('📋 Datos recibidos de get_waiting:', {
+            isArray: Array.isArray(data),
+            length: Array.isArray(data) ? data.length : 'No es array',
+            data: data,
+            timestamp: new Date().toISOString()
+        });
+        
+        return data;
     } catch (error) {
         console.error('❌ Error en getWaitingChats:', error);
         throw new Error("No se pudieron obtener los chats en espera");
+    }
+}
+
+export async function executiveAvailable(executiveId: number, available: boolean) {
+    try {
+        console.log('🔄 APIaaaaaaaa: Cambiando disponibilidad del ejecutivo:', {
+            executiveId,
+            available
+        });
+        const accessToken = getAccessToken();
+        const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/toggle_executive_availability`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json",
+                "Authorization": `Bearer ${accessToken}`
+             },
+            body: JSON.stringify({ executiveId, available }),
+        });
+        if (!res.ok) throw new Error("No se pudo obtener el estado del ejecutivo");
+        return res.json();
+    } catch (error) {
+        console.error('❌ Error en executiveState:', error);
+        throw new Error("No se pudo obtener el estado del ejecutivo");
     }
 }

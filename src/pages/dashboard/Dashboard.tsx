@@ -144,11 +144,11 @@ const Dashboard: React.FC = () => {
       return contacts;
     },
     enabled: !!session?.executive?.id,
-    staleTime: 1000 * 60 * 15, // ✅ 15 minutos - contactos no cambian tan seguido
-    gcTime: 1000 * 60 * 60, // ✅ 1 hora en cache
-    refetchOnWindowFocus: false, // ✅ No refetch al cambiar de ventana
-    refetchOnMount: false, // ✅ No refetch al montar si hay cache
-    refetchInterval: 1000 * 60 * 5, // ✅ Refetch automático cada 5 minutos para mantener sincronizado
+    staleTime: 1000 * 30, // ✅ Reducir stale time a 30 segundos para contactos en espera
+    gcTime: 1000 * 60 * 30, // ✅ 30 minutos en cache
+    refetchOnWindowFocus: true, // ✅ Sí refetch al cambiar de ventana para contactos en espera
+    refetchOnMount: true, // ✅ Sí refetch al montar para contactos en espera
+    refetchInterval: 1000 * 30, // ✅ Refetch cada 30 segundos para contactos en espera
   });
 
   // ✅ Callback para cuando se cierra un contacto
@@ -245,6 +245,24 @@ const Dashboard: React.FC = () => {
       unreadCountsSize: unreadCounts?.size || 0,
       timestamp: new Date().toISOString(),
     });
+    
+    // ✅ Log detallado de cada contacto en espera
+    console.log("📋 CONTACTOS EN ESPERA RECIBIDOS DEL API:", {
+      total: waitingContactsData.length,
+      contactos: waitingContactsData.map(contact => ({
+        waId: contact.waId,
+        id: contact.id,
+        executiveId: contact.executiveId,
+        open: contact.open,
+        activo: contact.activo,
+        createdAt: contact.createdAt,
+        executive: contact.executive ? {
+          id: contact.executive.id,
+          name: contact.executive.name,
+          available: contact.executive.available
+        } : null
+      }))
+    });
 
     const result = addUnreadCountsToContacts(waitingContactsData);
 
@@ -266,15 +284,42 @@ const Dashboard: React.FC = () => {
 
   // ✅ Filtrar contactos por tab activo usando endpoints separados
   const filteredContacts = React.useMemo(() => {
+    console.log("🔍 FILTRANDO CONTACTOS POR TAB ACTIVO:", {
+      activeTab,
+      openContactsCount: openContactsWithUnread.length,
+      waitingContactsCount: waitingContactsWithUnread.length,
+      closedContactsCount: closedContactsWithUnread.length,
+      timestamp: new Date().toISOString()
+    });
+    
     if (activeTab === "abierto") {
+      console.log("📋 Mostrando contactos ABIERTOS:", {
+        count: openContactsWithUnread.length,
+        contacts: openContactsWithUnread.map(c => ({ waId: c.waId, id: c.id }))
+      });
       return openContactsWithUnread; // ✅ Usar contactos abiertos del endpoint específico
     } else if (activeTab === "espera") {
+      console.log("⏳ MOSTRANDO CONTACTOS EN ESPERA:", {
+        count: waitingContactsWithUnread.length,
+        contacts: waitingContactsWithUnread.map(c => ({ 
+          waId: c.waId, 
+          id: c.id,
+          executiveId: c.executiveId,
+          open: c.open,
+          activo: c.activo
+        })),
+        rawData: waitingContactsData
+      });
       return waitingContactsWithUnread; // ✅ Usar contactos en espera del endpoint específico
     } else if (activeTab === "cerrado") {
+      console.log("🔒 Mostrando contactos CERRADOS:", {
+        count: closedContactsWithUnread.length,
+        contacts: closedContactsWithUnread.map(c => ({ waId: c.waId, id: c.id }))
+      });
       return closedContactsWithUnread; // ✅ Usar contactos cerrados del endpoint específico
     }
     return [];
-  }, [openContactsWithUnread, waitingContactsWithUnread, closedContactsWithUnread, activeTab]);
+  }, [openContactsWithUnread, waitingContactsWithUnread, closedContactsWithUnread, activeTab, waitingContactsData]);
 
   // ✅ Conectar a rooms de todos los contactos activos
   useEffect(() => {
@@ -441,11 +486,74 @@ const Dashboard: React.FC = () => {
     }
   }, [newContacts, queryClient, session?.executive?.id, clearNewContacts]);
 
+  // ✅ NUEVO: Efecto específico para manejar eventos que afectan contactos en espera
+  useEffect(() => {
+    // Este efecto se ejecuta cuando hay cambios que podrían afectar la lista de contactos en espera
+    // Por ejemplo: cuando se agrega un evento, se cierra un chat, etc.
+    console.log("🎯 Revisando si necesitamos refrescar contactos en espera...");
+    
+    // Invalidar inmediatamente la query de contactos en espera
+    const invalidateWaitingContacts = () => {
+      console.log("🔄 Forzando refetch de contactos en espera...");
+      
+      // Invalidar la query
+      queryClient.invalidateQueries({
+        queryKey: ["waitingContacts", session?.executive?.id],
+        exact: true,
+      });
+      
+      // Forzar refetch inmediato
+      queryClient.refetchQueries({
+        queryKey: ["waitingContacts", session?.executive?.id],
+        exact: true,
+        type: "active",
+      }).then((results) => {
+        console.log("✅ Contactos en espera actualizados:", {
+          results,
+          timestamp: new Date().toISOString()
+        });
+        
+        // Verificar los datos actuales
+        const updatedWaitingContacts = queryClient.getQueryData([
+          "waitingContacts", 
+          session?.executive?.id
+        ]);
+        
+        console.log("📋 CONTACTOS EN ESPERA DESPUÉS DEL REFETCH:", {
+          count: Array.isArray(updatedWaitingContacts) ? updatedWaitingContacts.length : 0,
+          contacts: Array.isArray(updatedWaitingContacts) 
+            ? updatedWaitingContacts.map((c: any) => ({
+                waId: c.waId,
+                id: c.id,
+                executiveId: c.executiveId,
+                open: c.open,
+                activo: c.activo
+              }))
+            : []
+        });
+      });
+    };
+    
+    // Ejecutar invalidación cuando sea necesario
+    // Puedes llamar esta función cuando agregues un evento:
+    // invalidateWaitingContacts();
+    
+    // Por ahora, invalidar cada vez que cambie la lista de contactos normales
+    // Esto asegura que si un contacto se mueve a "espera", aparezca inmediatamente
+    if (contactsData || closedContactsData) {
+      // Pequeño delay para evitar race conditions con el backend
+      const timeoutId = setTimeout(() => {
+        invalidateWaitingContacts();
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [contactsData, closedContactsData, queryClient, session?.executive?.id]);
+
   // ✅ Sincronizar automáticamente las listas para evitar duplicados
   useEffect(() => {
     // Cuando se actualiza cualquiera de las listas, verificar si hay inconsistencias
     if (contactsData && closedContactsData) {
-      const openWaIds = new Set(contactsData.map(c => c.waId));
       const closedWaIds = new Set(closedContactsData.map(c => c.waId));
       
       // Buscar duplicados (contactos que aparecen en ambas listas)
@@ -461,35 +569,19 @@ const Dashboard: React.FC = () => {
         queryClient.invalidateQueries({
           queryKey: ["contacts", session?.executive?.id],
         });
+        queryClient.invalidateQueries({
+          queryKey: ["waitingContacts", session?.executive?.id],
+        });
         
         queryClient.invalidateQueries({
           queryKey: ["closedContacts", session?.executive?.id],
         });
       }
     }
-  }, [contactsData, closedContactsData, queryClient, session?.executive?.id]);
+  }, [contactsData, waitingContactsData, closedContactsData, queryClient, session?.executive?.id]);
 
   // ✅ Sincronización INTELIGENTE basada en eventos del socket
   useEffect(() => {
-    console.log("🔄 USEEFFECT SINCRONIZACIÓN EJECUTADO:", {
-      selectedContact: selectedContact?.waId,
-      newMessagesCount: newMessages.length,
-      timestamp: new Date().toISOString(),
-    });
-
-    console.log("🧪 VERIFICANDO CONDICIONES INICIALES:", {
-      hasSelectedContact: !!selectedContact,
-      selectedContactWaId: selectedContact?.waId,
-      hasNewMessages: newMessages.length > 0,
-      newMessagesLength: newMessages.length,
-      newMessagesDetails: newMessages.map((m) => ({
-        id: m.id,
-        waId: m.waId,
-        message: m.message?.slice(0, 30),
-      })),
-    });
-
-    console.log({ selectedContact, newMessages });
 
     // ✅ NUEVA LÓGICA: Verificar si hay mensajes de contactos que NO están en la lista
     if (newMessages.length > 0 && (contactsData || closedContactsData)) {
@@ -516,6 +608,9 @@ const Dashboard: React.FC = () => {
           exact: true,
         });
         queryClient.invalidateQueries({
+          queryKey: ["waitingContacts", session?.executive?.id],
+        });
+        queryClient.invalidateQueries({
           queryKey: ["closedContacts", session?.executive?.id],
           exact: true,
         });
@@ -535,6 +630,11 @@ const Dashboard: React.FC = () => {
               exact: true,
               type: "active",
             });
+            return queryClient.refetchQueries({
+              queryKey: ["waitingContacts", session?.executive?.id],
+              exact: true,
+              type: "active",
+            });
           })
           .then((results) => {
             console.log("✅ Lista de contactos cerrados actualizada");
@@ -543,6 +643,10 @@ const Dashboard: React.FC = () => {
             // ✅ Verificar qué contactos están ahora en cache
             const updatedOpenContacts = queryClient.getQueryData([
               "contacts",
+              session?.executive?.id,
+            ]);
+            const updatedWaitingContacts = queryClient.getQueryData([
+              "waitingContacts",
               session?.executive?.id,
             ]);
             const updatedClosedContacts = queryClient.getQueryData([
@@ -559,6 +663,13 @@ const Dashboard: React.FC = () => {
                 : 0,
               openContacts: Array.isArray(updatedOpenContacts)
                 ? updatedOpenContacts.map((c: any) => ({
+                    waId: c.waId,
+                    executiveId: c.executiveId,
+                    id: c.id,
+                  }))
+                : [],
+              waitingContacts: Array.isArray(updatedWaitingContacts)
+                ? updatedWaitingContacts.map((c: any) => ({
                     waId: c.waId,
                     executiveId: c.executiveId,
                     id: c.id,
@@ -651,6 +762,10 @@ const Dashboard: React.FC = () => {
       // Actualizar ambas listas de contactos con los nuevos unread counts
       queryClient.invalidateQueries({
         queryKey: ["contacts", session?.executive?.id],
+        exact: true,
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["waitingContacts", session?.executive?.id],
         exact: true,
       });
       
@@ -817,6 +932,73 @@ const Dashboard: React.FC = () => {
       exact: true,
     });
   };
+
+  // ✅ Función específica para refrescar contactos en espera cuando se agrega un evento
+  const forceRefreshWaitingContacts = React.useCallback(async () => {
+    console.log("🚀 FORZANDO REFRESH DE CONTACTOS EN ESPERA después de agregar evento");
+    
+    try {
+      // 1. Invalidar todas las queries de contactos
+      await queryClient.invalidateQueries({
+        queryKey: ["waitingContacts", session?.executive?.id],
+        exact: true,
+      });
+      
+      await queryClient.invalidateQueries({
+        queryKey: ["contacts", session?.executive?.id],
+        exact: true,
+      });
+      
+      // 2. Forzar refetch inmediato de contactos en espera
+      const waitingResults = await queryClient.refetchQueries({
+        queryKey: ["waitingContacts", session?.executive?.id],
+        exact: true,
+        type: "active",
+      });
+      
+      // 3. También refetch contactos abiertos para mantener consistencia
+      const openResults = await queryClient.refetchQueries({
+        queryKey: ["contacts", session?.executive?.id],
+        exact: true,
+        type: "active",
+      });
+      
+      console.log("✅ REFRESH COMPLETO - Resultados:", {
+        waitingResults,
+        openResults,
+        timestamp: new Date().toISOString()
+      });
+      
+      // 4. Verificar los datos finales
+      const updatedWaiting = queryClient.getQueryData(["waitingContacts", session?.executive?.id]);
+      const updatedOpen = queryClient.getQueryData(["contacts", session?.executive?.id]);
+      
+      console.log("📊 ESTADO FINAL DESPUÉS DEL REFRESH:", {
+        waitingCount: Array.isArray(updatedWaiting) ? updatedWaiting.length : 0,
+        openCount: Array.isArray(updatedOpen) ? updatedOpen.length : 0,
+        waitingContacts: Array.isArray(updatedWaiting) 
+          ? updatedWaiting.map((c: any) => ({ waId: c.waId, id: c.id }))
+          : [],
+        openContacts: Array.isArray(updatedOpen) 
+          ? updatedOpen.map((c: any) => ({ waId: c.waId, id: c.id }))
+          : []
+      });
+      
+      return { success: true, waitingCount: Array.isArray(updatedWaiting) ? updatedWaiting.length : 0 };
+      
+    } catch (error) {
+      console.error("❌ Error refrescando contactos en espera:", error);
+      return { success: false, error };
+    }
+  }, [queryClient, session?.executive?.id]);
+
+  // ✅ Exponer la función globalmente para testing desde la consola
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).forceRefreshWaitingContacts = forceRefreshWaitingContacts;
+      console.log("🔧 DEBUG: forceRefreshWaitingContacts disponible en window.forceRefreshWaitingContacts()");
+    }
+  }, [forceRefreshWaitingContacts]);
 
   // ✅ Envío de mensaje BASADO EN EVENTOS (sin polling manual)
   const handleSendMessage = (message: string) => {
