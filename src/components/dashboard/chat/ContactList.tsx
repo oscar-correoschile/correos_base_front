@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   List,
@@ -14,11 +14,16 @@ import {
   Tab,
   Badge,
   Chip,
+  Button,
+  IconButton,
 } from '@mui/material';
-import { Search, Person } from '@mui/icons-material';
+import { Search, Person, PersonAdd } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import { colors } from '@/styles/colors';
 import { socketService, type UnreadCount } from '@/api/socketService';
+import { takeChats } from '@/api/chatService';
+import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchSession } from '@/queries/session';
 
 interface Contact {
     id:          number;
@@ -52,6 +57,7 @@ interface ContactListProps {
   onContactSelect: (contact: Contact) => void;
   activeTab: 'abierto' | 'espera' | 'cerrado';
   onTabChange: (tab: 'abierto' | 'espera' | 'cerrado') => void;
+  onTakeChat?: (contact: Contact) => Promise<void>;
 }
 
 const SearchField = styled(TextField)(({ theme }) => ({
@@ -121,7 +127,11 @@ const ContactItem = React.memo<{
   onContactSelect: (contact: any) => void;
   shouldShowBadge: (contact: any) => boolean;
   getBadgeContent: (contact: any) => number;
-}>(({ contact, isSelected, onContactSelect, shouldShowBadge, getBadgeContent }) => {
+  activeTab: 'abierto' | 'espera' | 'cerrado';
+  onTakeChat?: (contact: any) => Promise<void>;
+}>(({ contact, isSelected, onContactSelect, shouldShowBadge, getBadgeContent, activeTab, onTakeChat }) => {
+  
+  const [isTakingChat, setIsTakingChat] = useState(false);
   
   const badgeVisible = shouldShowBadge(contact);
   const badgeContent = getBadgeContent(contact);
@@ -135,12 +145,42 @@ const ContactItem = React.memo<{
     unreadCount: contact.unreadCount,
     finalBadgeValue: finalBadgeVisible ? badgeContent : 0
   });
+
+  const handleTakeChat = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Evitar que se seleccione el contacto
+    
+    if (!onTakeChat || isTakingChat) return;
+    
+    setIsTakingChat(true);
+    try {
+      await onTakeChat(contact);
+      console.log('✅ Chat tomado exitosamente:', contact.waId);
+    } catch (error) {
+      console.error('❌ Error tomando chat:', error);
+    } finally {
+      setIsTakingChat(false);
+    }
+  };
   
   return (
     <ContactListItem
       isSelected={isSelected}
       selected={isSelected}
-      onClick={() => onContactSelect(contact)}
+      onClick={() => {
+        // No permitir seleccionar contactos en la pestaña "En Espera"
+        if (activeTab === 'espera') {
+          console.log('🚫 No se puede seleccionar contactos en espera');
+          return;
+        }
+        onContactSelect(contact);
+      }}
+      sx={{
+        cursor: activeTab === 'espera' ? 'default' : 'pointer',
+        opacity: activeTab === 'espera' ? 0.8 : 1,
+        '&:hover': {
+          backgroundColor: activeTab === 'espera' ? 'transparent' : undefined,
+        }
+      }}
     >
       <ListItemAvatar>
         <Badge
@@ -190,6 +230,33 @@ const ContactItem = React.memo<{
             >
               {contact.waId}
             </Typography>
+            
+            {/* Botón "Tomar Chat" solo en la pestaña "En Espera" */}
+            {activeTab === 'espera' && onTakeChat && (
+              <Button
+                size="small"
+                variant="contained"
+                disabled={isTakingChat}
+                onClick={handleTakeChat}
+                sx={{
+                  minWidth: 'auto',
+                  px: 1,
+                  py: 0.5,
+                  fontSize: '0.7rem',
+                  backgroundColor: colors.primary.main,
+                  '&:hover': {
+                    backgroundColor: colors.primary.var80,
+                  },
+                  '&:disabled': {
+                    backgroundColor: colors.secondary.var80,
+                  }
+                }}
+                startIcon={isTakingChat ? undefined : <PersonAdd sx={{ fontSize: '14px !important' }} />}
+              >
+                {isTakingChat ? 'Tomando...' : 'Tomar'}
+              </Button>
+            )}
+            
             <Typography 
               variant="caption" 
               sx={{ color: colors.secondary.var50 }}
@@ -210,6 +277,7 @@ const ContactList: React.FC<ContactListProps> = ({
   onContactSelect,
   activeTab,
   onTabChange,
+  onTakeChat,
 }) => {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [visitedContacts, setVisitedContacts] = React.useState<Set<string>>(new Set());
@@ -537,6 +605,8 @@ const ContactList: React.FC<ContactListProps> = ({
             onContactSelect={handleContactSelect}
             shouldShowBadge={shouldShowBadge}
             getBadgeContent={getBadgeContent}
+            activeTab={activeTab}
+            onTakeChat={onTakeChat}
           />
         ))}
       </List>

@@ -5,7 +5,7 @@ import { colors } from "@/styles/colors";
 import ContactList from "@/components/dashboard/chat/ContactList";
 import ChatArea from "@/components/dashboard/chat/ChatArea";
 // import CustomerInfo from '@/components/dashboard/chat/CustomerInfo';
-import { getClosedChats, getMessages, getOpenContacts, getWaitingChats, sendMessage } from "@/api/chatService";
+import { getClosedChats, getMessages, getOpenContacts, getWaitingChats, sendMessage, takeChats } from "@/api/chatService";
 import {
   useQuery,
   useSuspenseQuery,
@@ -82,6 +82,15 @@ const Dashboard: React.FC = () => {
   const { data: session } = useSuspenseQuery(fetchSession());
   const queryClient = useQueryClient();
 
+  // ✅ Función para manejar cambio de tab y deseleccionar contacto en "espera"
+  const handleTabChange = (newTab: "abierto" | "espera" | "cerrado") => {
+    setActiveTab(newTab);
+    // Si cambiamos a "espera", deseleccionar cualquier contacto seleccionado
+    if (newTab === 'espera') {
+      setSelectedContact(null);
+    }
+  };
+
   // ✅ Socket connection para chat en tiempo real
   const {
     isConnected,
@@ -148,7 +157,7 @@ const Dashboard: React.FC = () => {
     gcTime: 1000 * 60 * 30, // ✅ 30 minutos en cache
     refetchOnWindowFocus: true, // ✅ Sí refetch al cambiar de ventana para contactos en espera
     refetchOnMount: true, // ✅ Sí refetch al montar para contactos en espera
-    refetchInterval: 1000 * 30, // ✅ Refetch cada 30 segundos para contactos en espera
+    refetchInterval: 1000 * 15, // ✅ Refetch cada 15 segundos para contactos en espera
   });
 
   // ✅ Callback para cuando se cierra un contacto
@@ -1000,6 +1009,47 @@ const Dashboard: React.FC = () => {
     }
   }, [forceRefreshWaitingContacts]);
 
+  // ✅ Función para tomar un chat de la lista de espera
+  const handleTakeChat = React.useCallback(async (contact: Contact2) => {
+    try {
+      console.log('🎯 Tomando chat:', contact);
+      
+      if (!session?.executive?.id) {
+        console.error('❌ No hay ejecutivo en sesión');
+        return;
+      }
+      
+      // Llamar al servicio takeChats con waId y executiveId
+      await takeChats(contact.waId, session.executive.id);
+      
+      // Invalidar y refrescar ambas queries
+      await queryClient.invalidateQueries({
+        queryKey: ["waitingContacts", session?.executive?.id],
+        exact: true,
+      });
+      
+      await queryClient.invalidateQueries({
+        queryKey: ["contacts", session?.executive?.id], 
+        exact: true,
+      });
+      
+      // Refetch inmediato
+      await queryClient.refetchQueries({
+        queryKey: ["waitingContacts", session?.executive?.id],
+        exact: true,
+      });
+      
+      await queryClient.refetchQueries({
+        queryKey: ["contacts", session?.executive?.id],
+        exact: true,
+      });
+      
+      console.log('✅ Chat tomado exitosamente');
+    } catch (error) {
+      console.error('❌ Error al tomar el chat:', error);
+    }
+  }, [queryClient, session?.executive?.id]);
+
   // ✅ Envío de mensaje BASADO EN EVENTOS (sin polling manual)
   const handleSendMessage = (message: string) => {
     if (!selectedContact) {
@@ -1117,7 +1167,8 @@ const Dashboard: React.FC = () => {
           selectedContact={selectedContact}
           onContactSelect={handleContactSelect}
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={handleTabChange}
+          onTakeChat={handleTakeChat}
         />
       </SidebarContainer>
 

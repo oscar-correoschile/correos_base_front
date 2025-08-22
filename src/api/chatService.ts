@@ -224,3 +224,25 @@ export async function executiveAvailable(executiveId: number, available: boolean
         throw new Error("No se pudo obtener el estado del ejecutivo");
     }
 }
+
+export async function takeChats(waId: string, executiveId: number) {
+    try {
+        console.log('🔄 API: Asignando chat a ejecutivo:', {
+            waId,
+            executiveId
+        });
+        const accessToken = getAccessToken();
+        const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/take_chats`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json",
+                "Authorization": `Bearer ${accessToken}`
+             },
+            body: JSON.stringify({ waId, executiveId }),
+        });
+        if (!res.ok) throw new Error("No se pudo asignar el chat");
+        return res.json();
+    } catch (error) {
+        console.error('❌ Error en takeChats:', error);
+        throw new Error("No se pudo asignar el chat");
+    }
+}
