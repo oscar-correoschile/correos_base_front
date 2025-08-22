@@ -5,7 +5,7 @@ import { colors } from "@/styles/colors";
 import ContactList from "@/components/dashboard/chat/ContactList";
 import ChatArea from "@/components/dashboard/chat/ChatArea";
 // import CustomerInfo from '@/components/dashboard/chat/CustomerInfo';
-import { getContacts, getMessages, sendMessage } from "@/api/chatService";
+import { getClosedChats, getMessages, getOpenContacts, getWaitingChats, sendMessage } from "@/api/chatService";
 import {
   useQuery,
   useSuspenseQuery,
@@ -22,6 +22,8 @@ interface Contact2 {
   createdAt: Date;
   updatedAt: Date;
   deletedAt: null;
+  open: boolean;
+  activo: boolean;
   executive: Executive;
 }
 interface Executive {
@@ -107,7 +109,7 @@ const Dashboard: React.FC = () => {
   const { data: contactsData } = useQuery<Contact2[], Error>({
     queryKey: ["contacts", session?.executive?.id],
     queryFn: async () => {
-      const contacts = await getContacts(session.executive.id);
+      const contacts = await getOpenContacts(session.executive.id);
       console.log("📋 Contactos obtenidos:", contacts.length);
       return contacts;
     },
@@ -116,16 +118,66 @@ const Dashboard: React.FC = () => {
     gcTime: 1000 * 60 * 60, // ✅ 1 hora en cache
     refetchOnWindowFocus: false, // ✅ No refetch al cambiar de ventana
     refetchOnMount: false, // ✅ No refetch al montar si hay cache
-    refetchInterval: 1000 * 60 * 10, // ✅ Refetch automático cada 10 minutos
+    refetchInterval: 1000 * 60 * 5, // ✅ Refetch automático cada 5 minutos para mantener sincronizado
+  });
+
+  const { data: closedContactsData } = useQuery<Contact2[], Error>({
+    queryKey: ["closedContacts", session?.executive?.id],
+    queryFn: async () => {
+      const contacts = await getClosedChats();
+      console.log("📋 Contactos cerrados obtenidos:", contacts.length);
+      return contacts;
+    },
+    enabled: !!session?.executive?.id,
+    staleTime: 1000 * 60 * 15, // ✅ 15 minutos - contactos no cambian tan seguido
+    gcTime: 1000 * 60 * 60, // ✅ 1 hora en cache
+    refetchOnWindowFocus: false, // ✅ No refetch al cambiar de ventana
+    refetchOnMount: false, // ✅ No refetch al montar si hay cache
+    refetchInterval: 1000 * 60 * 5, // ✅ Refetch automático cada 5 minutos para mantener sincronizado
+  });
+
+  const { data: waitingContactsData } = useQuery<Contact2[], Error>({
+    queryKey: ["waitingContacts", session?.executive?.id],
+    queryFn: async () => {
+      const contacts = await getWaitingChats();
+      console.log("📋 Contactos en espera obtenidos:", contacts.length);
+      return contacts;
+    },
+    enabled: !!session?.executive?.id,
+    staleTime: 1000 * 60 * 15, // ✅ 15 minutos - contactos no cambian tan seguido
+    gcTime: 1000 * 60 * 60, // ✅ 1 hora en cache
+    refetchOnWindowFocus: false, // ✅ No refetch al cambiar de ventana
+    refetchOnMount: false, // ✅ No refetch al montar si hay cache
+    refetchInterval: 1000 * 60 * 5, // ✅ Refetch automático cada 5 minutos para mantener sincronizado
   });
 
   // ✅ Callback para cuando se cierra un contacto
   const handleContactClosed = React.useCallback(
-    (waId: string) => {
+    async (waId: string) => {
       console.log("🔒 Contacto cerrado:", {
         waId,
         sWaId: selectedContact?.waId,
       });
+
+      try {
+        // ✅ Limpiar unread counts del contacto que se está cerrando
+        markAsRead(waId);
+        console.log("🧹 Limpiando unread counts para contacto cerrado:", waId);
+        
+        // ✅ Invalidar todas las queries para refrescar las listas
+        queryClient.invalidateQueries({
+          queryKey: ["contacts", session?.executive?.id],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["closedContacts", session?.executive?.id],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["waitingContacts", session?.executive?.id],
+        });
+        
+      } catch (error) {
+        console.error("❌ Error cerrando contacto:", error);
+      }
 
       // ✅ Si el contacto cerrado es el seleccionado, limpiarlo
       if (selectedContact?.waId === waId) {
@@ -134,14 +186,14 @@ const Dashboard: React.FC = () => {
         leaveChat(); // ✅ Salir del chat por socket
       }
     },
-    [selectedContact?.waId, leaveChat]
+    [selectedContact?.waId, leaveChat, queryClient, session?.executive?.id, markAsRead]
   );
 
-  // ✅ Agregar conteos no leídos a los contactos (con logging para debug)
-  const contactsWithUnread: ContactWithUnread[] = React.useMemo(() => {
+  // ✅ Agregar conteos no leídos a los contactos abiertos (con logging para debug)
+  const openContactsWithUnread: ContactWithUnread[] = React.useMemo(() => {
     if (!contactsData) return [];
 
-    console.log("🔍 CALCULANDO contactsWithUnread:", {
+    console.log("🔍 CALCULANDO openContactsWithUnread:", {
       contactsDataLength: contactsData.length,
       unreadCounts: unreadCounts,
       unreadCountsSize: unreadCounts?.size || 0,
@@ -150,7 +202,7 @@ const Dashboard: React.FC = () => {
 
     const result = addUnreadCountsToContacts(contactsData);
 
-    console.log("📊 RESULTADO contactsWithUnread:", {
+    console.log("📊 RESULTADO openContactsWithUnread:", {
       resultLength: result.length,
       contactsWithBadges: result
         .filter((c) => c.unreadCount && c.unreadCount > 0)
@@ -161,17 +213,68 @@ const Dashboard: React.FC = () => {
     return result;
   }, [contactsData, unreadCounts]); // ✅ Agregar unreadCounts como dependencia
 
-  // ✅ Filtrar contactos por tab activo
+  // ✅ Agregar conteos no leídos solo a los contactos abiertos (contactos cerrados no deben tener badges)
+  const closedContactsWithUnread: ContactWithUnread[] = React.useMemo(() => {
+    if (!closedContactsData) return [];
+
+    console.log("🔍 CALCULANDO closedContactsWithUnread (sin badges):", {
+      closedContactsDataLength: closedContactsData.length,
+      timestamp: new Date().toISOString(),
+    });
+
+    // ✅ No agregar unread counts a contactos cerrados - siempre 0
+    const result = closedContactsData.map(contact => ({
+      ...contact,
+      unreadCount: 0 // ✅ Contactos cerrados nunca tienen badge
+    }));
+
+    console.log("📊 RESULTADO closedContactsWithUnread (sin badges):", {
+      resultLength: result.length,
+      timestamp: new Date().toISOString(),
+    });
+
+    return result;
+  }, [closedContactsData]); // ✅ No depende de unreadCounts porque no los necesita
+
+  const waitingContactsWithUnread: ContactWithUnread[] = React.useMemo(() => {
+    if (!waitingContactsData) return [];
+
+    console.log("🔍 CALCULANDO waitingContactsWithUnread:", {
+      waitingContactsDataLength: waitingContactsData.length,
+      unreadCounts: unreadCounts,
+      unreadCountsSize: unreadCounts?.size || 0,
+      timestamp: new Date().toISOString(),
+    });
+
+    const result = addUnreadCountsToContacts(waitingContactsData);
+
+    console.log("📊 RESULTADO waitingContactsWithUnread:", {
+      resultLength: result.length,
+      contactsWithBadges: result
+        .filter((c) => c.unreadCount && c.unreadCount > 0)
+        .map((c) => ({ waId: c.waId, unreadCount: c.unreadCount })),
+      timestamp: new Date().toISOString(),
+    });
+
+    return result;
+  }, [waitingContactsData, unreadCounts]); // ✅ Contactos en espera sí pueden tener badges
+
+  // ✅ Combinar todos los contactos para el prop allContacts
+  const allContactsWithUnread: ContactWithUnread[] = React.useMemo(() => {
+    return [...openContactsWithUnread, ...waitingContactsWithUnread, ...closedContactsWithUnread];
+  }, [openContactsWithUnread, waitingContactsWithUnread, closedContactsWithUnread]);
+
+  // ✅ Filtrar contactos por tab activo usando endpoints separados
   const filteredContacts = React.useMemo(() => {
     if (activeTab === "abierto") {
-      return contactsWithUnread.filter((contact) => !contact.deletedAt);
+      return openContactsWithUnread; // ✅ Usar contactos abiertos del endpoint específico
     } else if (activeTab === "espera") {
-      return []; // TODO: Implementar cuando tengamos contactos con status 'WAITING'
+      return waitingContactsWithUnread; // ✅ Usar contactos en espera del endpoint específico
     } else if (activeTab === "cerrado") {
-      return contactsWithUnread.filter((contact) => contact.deletedAt);
+      return closedContactsWithUnread; // ✅ Usar contactos cerrados del endpoint específico
     }
     return [];
-  }, [contactsWithUnread, activeTab]);
+  }, [openContactsWithUnread, waitingContactsWithUnread, closedContactsWithUnread, activeTab]);
 
   // ✅ Conectar a rooms de todos los contactos activos
   useEffect(() => {
@@ -299,13 +402,18 @@ const Dashboard: React.FC = () => {
         timestamp: new Date().toISOString(),
       });
 
-      // ✅ Refrescar inmediatamente la lista de contactos cuando llega un nuevo contacto
+      // ✅ Refrescar inmediatamente ambas listas cuando llega un nuevo contacto
       console.log(
-        "🔄 Invalidando lista de contactos por nuevo contacto detectado..."
+        "🔄 Invalidando ambas listas de contactos por nuevo contacto detectado..."
       );
 
       queryClient.invalidateQueries({
         queryKey: ["contacts", session?.executive?.id],
+        exact: true,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: ["closedContacts", session?.executive?.id],
         exact: true,
       });
 
@@ -316,12 +424,50 @@ const Dashboard: React.FC = () => {
           type: "active",
         })
         .then(() => {
-          console.log("✅ Lista de contactos actualizada por nuevo contacto");
-          // ✅ Limpiar los nuevos contactos después de procesar
+          console.log("✅ Lista de contactos abiertos actualizada por nuevo contacto");
+          
+          // También refetch contactos cerrados para evitar duplicados
+          return queryClient.refetchQueries({
+            queryKey: ["closedContacts", session?.executive?.id],
+            exact: true,
+            type: "active",
+          });
+        })
+        .then(() => {
+          console.log("✅ Lista de contactos cerrados actualizada por nuevo contacto");
+          // ✅ Limpiar los nuevos contactos después de procesar ambas listas
           clearNewContacts();
         });
     }
   }, [newContacts, queryClient, session?.executive?.id, clearNewContacts]);
+
+  // ✅ Sincronizar automáticamente las listas para evitar duplicados
+  useEffect(() => {
+    // Cuando se actualiza cualquiera de las listas, verificar si hay inconsistencias
+    if (contactsData && closedContactsData) {
+      const openWaIds = new Set(contactsData.map(c => c.waId));
+      const closedWaIds = new Set(closedContactsData.map(c => c.waId));
+      
+      // Buscar duplicados (contactos que aparecen en ambas listas)
+      const duplicates = contactsData.filter(contact => closedWaIds.has(contact.waId));
+      
+      if (duplicates.length > 0) {
+        console.warn("⚠️ Duplicados detectados entre listas abierta y cerrada:", 
+          duplicates.map(d => d.waId));
+        
+        // Refrescar ambas listas para resolver inconsistencias
+        console.log("🔄 Refrescando ambas listas para resolver duplicados...");
+        
+        queryClient.invalidateQueries({
+          queryKey: ["contacts", session?.executive?.id],
+        });
+        
+        queryClient.invalidateQueries({
+          queryKey: ["closedContacts", session?.executive?.id],
+        });
+      }
+    }
+  }, [contactsData, closedContactsData, queryClient, session?.executive?.id]);
 
   // ✅ Sincronización INTELIGENTE basada en eventos del socket
   useEffect(() => {
@@ -346,8 +492,9 @@ const Dashboard: React.FC = () => {
     console.log({ selectedContact, newMessages });
 
     // ✅ NUEVA LÓGICA: Verificar si hay mensajes de contactos que NO están en la lista
-    if (newMessages.length > 0 && contactsData) {
-      const contactWaIds = new Set(contactsData.map((contact) => contact.waId));
+    if (newMessages.length > 0 && (contactsData || closedContactsData)) {
+      const allCurrentContacts = [...(contactsData || []), ...(closedContactsData || [])];
+      const contactWaIds = new Set(allCurrentContacts.map((contact) => contact.waId));
       const newContactMessages = newMessages.filter(
         (msg) => !contactWaIds.has(msg.waId)
       );
@@ -363,9 +510,13 @@ const Dashboard: React.FC = () => {
           }
         );
 
-        // ✅ Invalidar y refetch la lista de contactos para que aparezcan los nuevos
+        // ✅ Invalidar y refetch ambas listas de contactos para que aparezcan los nuevos
         queryClient.invalidateQueries({
           queryKey: ["contacts", session?.executive?.id],
+          exact: true,
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["closedContacts", session?.executive?.id],
           exact: true,
         });
 
@@ -375,32 +526,51 @@ const Dashboard: React.FC = () => {
             exact: true,
             type: "active",
           })
+          .then(() => {
+            console.log("✅ Lista de contactos abiertos actualizada - nuevos contactos deberían aparecer ahora");
+            
+            // También refetch contactos cerrados
+            return queryClient.refetchQueries({
+              queryKey: ["closedContacts", session?.executive?.id],
+              exact: true,
+              type: "active",
+            });
+          })
           .then((results) => {
-            console.log(
-              "✅ Lista de contactos actualizada - nuevos contactos deberían aparecer ahora"
-            );
+            console.log("✅ Lista de contactos cerrados actualizada");
             console.log("📊 RESULTADO DEL REFETCH DE CONTACTOS:", results);
 
             // ✅ Verificar qué contactos están ahora en cache
-            const updatedContacts = queryClient.getQueryData([
+            const updatedOpenContacts = queryClient.getQueryData([
               "contacts",
               session?.executive?.id,
             ]);
+            const updatedClosedContacts = queryClient.getQueryData([
+              "closedContacts",
+              session?.executive?.id,
+            ]);
+            
             console.log("📋 CONTACTOS EN CACHE DESPUÉS DEL REFETCH:", {
-              totalContacts: Array.isArray(updatedContacts)
-                ? updatedContacts.length
+              totalOpenContacts: Array.isArray(updatedOpenContacts)
+                ? updatedOpenContacts.length
                 : 0,
-              contacts: Array.isArray(updatedContacts)
-                ? updatedContacts.map((c: any) => ({
+              totalClosedContacts: Array.isArray(updatedClosedContacts)
+                ? updatedClosedContacts.length
+                : 0,
+              openContacts: Array.isArray(updatedOpenContacts)
+                ? updatedOpenContacts.map((c: any) => ({
                     waId: c.waId,
                     executiveId: c.executiveId,
                     id: c.id,
                   }))
                 : [],
-              buscandoContacto: "56962168186",
-              contactoEncontrado: Array.isArray(updatedContacts)
-                ? updatedContacts.some((c) => c.waId === "56962168186")
-                : false,
+              closedContacts: Array.isArray(updatedClosedContacts)
+                ? updatedClosedContacts.map((c: any) => ({
+                    waId: c.waId,
+                    executiveId: c.executiveId,
+                    id: c.id,
+                  }))
+                : [],
             });
           });
       }
@@ -478,9 +648,14 @@ const Dashboard: React.FC = () => {
       socketService.triggerUnreadCountUpdate(unreadCountsArray);
       console.log("✅ triggerUnreadCountUpdate ejecutado desde Dashboard");
 
-      // Actualizar la lista de contactos con los nuevos unread counts
+      // Actualizar ambas listas de contactos con los nuevos unread counts
       queryClient.invalidateQueries({
         queryKey: ["contacts", session?.executive?.id],
+        exact: true,
+      });
+      
+      queryClient.invalidateQueries({
+        queryKey: ["closedContacts", session?.executive?.id],
         exact: true,
       });
     }
@@ -598,7 +773,7 @@ const Dashboard: React.FC = () => {
           clearNewMessages(selectedContact.waId); // ✅ Limpiar solo mensajes del contacto actual
         });
     }
-  }, [newMessages, selectedContact?.waId, queryClient, contactsData]); // ✅ Dependencias con contactsData para detectar nuevos contactos
+  }, [newMessages, selectedContact?.waId, queryClient, contactsData, closedContactsData]); // ✅ Dependencias con ambos datasets para detectar nuevos contactos
 
   // ✅ SIMPLE: Solo usar datos del API (socket invalida cache automáticamente)
   const allMessages = React.useMemo(() => {
@@ -621,9 +796,19 @@ const Dashboard: React.FC = () => {
     setSelectedContact(contact);
     markAsRead(contact.waId);
 
-    // ✅ Refetch de contactos y mensajes al seleccionar
+    // ✅ Refetch de todas las listas de contactos y mensajes al seleccionar
     queryClient.invalidateQueries({
       queryKey: ["contacts"],
+      exact: true,
+    });
+
+    queryClient.invalidateQueries({
+      queryKey: ["closedContacts"],
+      exact: true,
+    });
+
+    queryClient.invalidateQueries({
+      queryKey: ["waitingContacts"],
       exact: true,
     });
 
@@ -656,15 +841,31 @@ const Dashboard: React.FC = () => {
     queryClient.setQueryData(
       ["messages", selectedContact.waId],
       (oldMessages: any[] = []) => {
+        // ✅ Crear timestamp consistente con el servidor (en segundos, no milisegundos)
+        const now = new Date();
+        const timestampSeconds = Math.floor(now.getTime() / 1000); // ✅ Solo segundos (10 dígitos)
+        
+        console.log("🕐 Creando mensaje optimista con timestamp:", {
+          now: now.toISOString(),
+          timestampSeconds,
+          timestampLength: timestampSeconds.toString().length,
+          localTime: now.toLocaleTimeString("es-CL", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+            timeZone: "America/Santiago",
+          })
+        });
+        
         const optimisticMessage = {
           id: `temp_${Date.now()}`,
           waId: selectedContact.waId,
           metaId: `temp_${Date.now()}`,
-          metaTimestamp: Math.floor(Date.now() / 1000).toString(),
+          metaTimestamp: timestampSeconds.toString(), // ✅ Timestamp en segundos (10 dígitos)
           message: message,
           action: "send",
           sender: "EXECUTIVE" as const,
-          timestamp: new Date().toISOString(),
+          timestamp: now.toISOString(), // ✅ ISO timestamp para respaldo
           sessionId: session?.executive?.id?.toString() || "",
           flowId: null,
           source: "optimistic",
@@ -725,82 +926,12 @@ const Dashboard: React.FC = () => {
             variant="h6"
             sx={{ color: colors.secondary.var20, fontWeight: 600 }}
           >
-            MESA DE AYUDA
+            Asistente Humano
           </Typography>
-          {/* ✅ Indicador de conexión socket */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1 }}>
-            <Box
-              sx={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                backgroundColor: isConnected
-                  ? colors.success.main
-                  : colors.error.main,
-              }}
-            />
-            <Typography
-              variant="caption"
-              sx={{ color: colors.secondary.var50 }}
-            >
-              {isConnected ? "Conectado en tiempo real" : "Reconectando..."}
-            </Typography>
-            {totalUnreadCount > 0 && (
-              <Chip
-                label={`${totalUnreadCount} nuevos`}
-                size="small"
-                color="primary"
-                sx={{ ml: "auto" }}
-              />
-            )}
-            {/* ✅ Botón temporal para diagnóstico */}
-            <button
-              onClick={() => {
-                console.log("🔍 DIAGNÓSTICO MANUAL DEL SOCKET:");
-                console.log("Estado isConnected:", isConnected);
-                console.log("newMessages:", newMessages);
-                console.log("totalUnreadCount:", totalUnreadCount);
-
-                // Test manual del socket
-                const socketUrl =
-                  import.meta.env.VITE_API_WHATSAPP_URL ||
-                  "http://localhost:3000";
-                console.log("URL del socket configurada:", socketUrl);
-
-                // Verificar si el backend está corriendo
-                fetch(socketUrl + "/health")
-                  .then((res) => {
-                    console.log(
-                      "✅ Backend responde en:",
-                      socketUrl,
-                      "Status:",
-                      res.status
-                    );
-                  })
-                  .catch((err) => {
-                    console.error(
-                      "❌ Backend NO responde en:",
-                      socketUrl,
-                      "Error:",
-                      err
-                    );
-                  });
-              }}
-              style={{
-                padding: "4px 8px",
-                fontSize: "10px",
-                background: "#f0f0f0",
-                border: "1px solid #ccc",
-                cursor: "pointer",
-              }}
-            >
-              TEST
-            </button>
-          </Box>
         </Box>
         <ContactList
           contacts={filteredContacts} // ✅ Usar contactos filtrados con unread counts
-          allContacts={contactsWithUnread} // ✅ Todos los contactos para calcular contadores
+          allContacts={allContactsWithUnread} // ✅ Todos los contactos para calcular contadores
           selectedContact={selectedContact}
           onContactSelect={handleContactSelect}
           activeTab={activeTab}

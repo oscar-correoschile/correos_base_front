@@ -9,6 +9,8 @@ export interface ContactWithUnread {
   createdAt: Date;
   updatedAt: Date;
   deletedAt: null;
+  open: boolean;
+  activo: boolean;
   executive: {
     id: number;
     name: string;

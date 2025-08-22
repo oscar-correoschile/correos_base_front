@@ -27,6 +27,8 @@ interface Contact {
     createdAt:   Date;
     updatedAt:   Date;
     deletedAt:   null;
+    open: boolean;
+    activo:      boolean;
     executive:   Executive;
     unreadCount?: number;
 }
@@ -312,42 +314,6 @@ const ContactList: React.FC<ContactListProps> = ({
     return map;
   }, [contacts, realtimeUnreadCounts]);
 
-  // ✅ COMENTADO: useEffect que reseteaba visitedContacts automáticamente
-  // Este useEffect causaba problemas porque removía contactos de visitados
-  // cuando llegaban mensajes nuevos, interfiriendo con la lógica de badges
-  /*
-  React.useEffect(() => {
-    if (unreadCountsMap.size > 0) {
-      console.log('🔄 Detectados cambios en unreadCounts, procesando...');
-      
-      setVisitedContacts(prev => {
-        const newSet = new Set(prev);
-        let hasChanges = false;
-        
-        // Para cada contacto con unreadCount, removerlo de visitados
-        unreadCountsMap.forEach((count, contactId) => {
-          if (newSet.has(contactId)) {
-            console.log(`🔓 Removiendo contacto ${contactId} de visitados (unreadCount: ${count})`);
-            newSet.delete(contactId);
-            hasChanges = true;
-          } else {
-            console.log(`ℹ️ Contacto ${contactId} tiene unreadCount: ${count} pero no estaba en visitados`);
-          }
-        });
-        
-        if (hasChanges) {
-          console.log('📝 Visitados después del reset:', Array.from(newSet));
-          return newSet;
-        } else {
-          console.log('📝 No hay cambios en visitados');
-        }
-        
-        return prev;
-      });
-    }
-  }, [unreadCountsMap]);
-  */
-
   // Función para manejar selección de contacto
   const handleContactSelect = React.useCallback((contact: any) => {
     console.log(`[handleContactSelect] Contacto seleccionado: ${contact.waId}`);
@@ -394,9 +360,15 @@ const ContactList: React.FC<ContactListProps> = ({
       isSelected,
       hasUnread,
       isVisited,
+      activeTab,
       unreadCount: unreadCountsMap.get(contact.id) || 0,
-      lala: unreadCountsMap.get(contact.id),
     });
+    
+    // ✅ NUEVA REGLA: Contactos cerrados NUNCA muestran badges
+    if (activeTab === 'cerrado') {
+      console.log(`[shouldShowBadge] Contact ${contact.id}: NO badge porque es tab cerrado`);
+      return false;
+    }
     
     // No mostrar badge si está seleccionado actualmente
     if (isSelected) {
@@ -415,7 +387,7 @@ const ContactList: React.FC<ContactListProps> = ({
     
     // En todos los demás casos, no mostrar badge
     return false;
-  }, [selectedContact?.id, unreadCountsMap, visitedContacts]);
+  }, [selectedContact?.id, unreadCountsMap, visitedContacts, activeTab]);
   
   // Función para obtener el contenido del badge
   const getBadgeContent = React.useCallback((contact: any) => {
@@ -442,11 +414,10 @@ const ContactList: React.FC<ContactListProps> = ({
       return { abierto: 0, espera: 0, cerrado: 0 };
     }
 
-    // ✅ Por ahora, todos los contactos que llegan se consideran "abiertos"
-    // TODO: Cuando tengamos un campo 'status' en los contactos, usar esa lógica
-    const abierto = allContacts.filter(contact => !contact.deletedAt).length;
+    // ✅ Usar el campo 'activo' para determinar contactos abiertos y cerrados
+    const abierto = allContacts.filter(contact => contact.activo === true).length;
     const espera = 0; // Implementar cuando tengamos contactos con status 'WAITING'
-    const cerrado = allContacts.filter(contact => contact.deletedAt).length;
+    const cerrado = allContacts.filter(contact => contact.activo === false).length;
     
     return { abierto, espera, cerrado };
   }, [allContacts]); // Solo depende de allContacts

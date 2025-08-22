@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { styled, useTheme } from "@mui/material/styles";
+import { styled } from "@mui/material/styles";
 import Box from "@mui/material/Box";
 import Drawer from "@mui/material/Drawer";
 import CssBaseline from "@mui/material/CssBaseline";
@@ -12,20 +12,16 @@ import Typography from "@mui/material/Typography";
 import Divider from "@mui/material/Divider";
 import Button from "@mui/material/Button";
 import AccountCircle from "@mui/icons-material/AccountCircle";
-import IconButton from "@mui/material/IconButton";
-import MenuIcon from "@mui/icons-material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Menu from "@mui/material/Menu";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import Avatar from "@mui/material/Avatar";
+import Chip from "@mui/material/Chip";
 
 import ListItem from "@mui/material/ListItem";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import InboxIcon from "@mui/icons-material/MoveToInbox";
-import MailIcon from "@mui/icons-material/Mail";
-import InventoryIcon from "@mui/icons-material/Inventory";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import { Outlet } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
@@ -110,7 +106,6 @@ export const LayoutComponent = ({
 }: {
   queryClient: QueryClient;
 }) => {
-  const theme = useTheme();
   const [open, setOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
@@ -215,28 +210,95 @@ export const LayoutComponent = ({
     setOpen(false);
   };
 
+  // Función para obtener las iniciales del nombre
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
   return (
     <Box sx={{ flexGrow: 1 }}>
       <CssBaseline />
       <AppBar position="static" open={open}>
-        <Toolbar>
+        <Toolbar sx={{ justifyContent: 'space-between' }}>
+          {/* <Typography variant="h6" component="div" sx={{ 
+            color: colors.secondary.var20,
+            fontWeight: 600 
+          }}>
+            Mesa de Ayuda
+          </Typography> */}
+          <div></div>
+
           {!isPending && session ? (
-            <div>
-              <IconButton
-                size="large"
-                aria-label="account of current user"
-                aria-controls="menu-appbar"
-                aria-haspopup="true"
-                onClick={handleMenu}
-                color="inherit"
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              {/* Información del ejecutivo */}
+              <Box sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 1.5,
+                cursor: 'pointer',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                transition: 'background-color 0.2s',
+                '&:hover': {
+                  backgroundColor: colors.secondary.var90
+                }
+              }}
+              onClick={handleMenu}
               >
-                <AccountCircle />
-              </IconButton>
+                <Avatar
+                  sx={{
+                    width: 36,
+                    height: 36,
+                    backgroundColor: colors.primary.main,
+                    fontSize: '14px',
+                    fontWeight: 600
+                  }}
+                >
+                  {getInitials(session.executive?.name || 'Usuario')}
+                </Avatar>
+                
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: colors.secondary.var20,
+                      fontWeight: 600,
+                      lineHeight: 1.2
+                    }}
+                  >
+                    {session.executive?.name || 'Usuario'}
+                  </Typography>
+                  {/* <Chip
+                    label={session.executive?.available ? "Disponible" : "Ocupado"}
+                    size="small"
+                    sx={{
+                      height: '18px',
+                      fontSize: '10px',
+                      fontWeight: 500,
+                      backgroundColor: session.executive?.available 
+                        ? colors.success.var95 
+                        : colors.warning.var95,
+                      color: session.executive?.available 
+                        ? colors.success.var30 
+                        : colors.warning.var30,
+                      '& .MuiChip-label': {
+                        px: 1
+                      }
+                    }}
+                  /> */}
+                </Box>
+              </Box>
+
               <Menu
                 id="menu-appbar"
                 anchorEl={anchorEl}
                 anchorOrigin={{
-                  vertical: "top",
+                  vertical: "bottom",
                   horizontal: "right",
                 }}
                 keepMounted
@@ -246,12 +308,38 @@ export const LayoutComponent = ({
                 }}
                 open={Boolean(anchorEl)}
                 onClose={handleClose}
+                sx={{
+                  '& .MuiPaper-root': {
+                    borderRadius: '8px',
+                    minWidth: '200px',
+                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+                    border: `1px solid ${colors.secondary.var80}`
+                  }
+                }}
               >
-                <MenuItem onClick={handleClose}>Perfil</MenuItem>
-                <MenuItem onClick={handleClose}>Mi cuenta</MenuItem>
-                <MenuItem onClick={handleLogout}>Cerrar Sesion</MenuItem>
+                <Box sx={{ p: 2, borderBottom: `1px solid ${colors.secondary.var80}` }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: colors.secondary.var20 }}>
+                    {session.executive?.name}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: colors.secondary.var50 }}>
+                    {session.executive?.email}
+                  </Typography>
+                </Box>
+                {/* <MenuItem onClick={handleClose} sx={{ py: 1.5 }}>
+                  <AccountCircle sx={{ mr: 2, color: colors.secondary.var50 }} />
+                  Perfil
+                </MenuItem>
+                <MenuItem onClick={handleClose} sx={{ py: 1.5 }}>
+                  <AccountCircle sx={{ mr: 2, color: colors.secondary.var50 }} />
+                  Configuración
+                </MenuItem> */}
+                <Divider />
+                <MenuItem onClick={handleLogout} sx={{ py: 1.5, color: colors.error.main }}>
+                  <AccountCircle sx={{ mr: 2, color: colors.error.main }} />
+                  Cerrar Sesión
+                </MenuItem>
               </Menu>
-            </div>
+            </Box>
           ) : (
             <Button color="inherit">Login</Button>
           )}
@@ -317,16 +405,6 @@ export const LayoutComponent = ({
                 }}
               />
             </Box>
-          )}
-
-          {open && (
-            <IconButton onClick={handleDrawerLeave}>
-              {theme.direction === "ltr" ? (
-                <ChevronLeftIcon />
-              ) : (
-                <ChevronRightIcon />
-              )}
-            </IconButton>
           )}
         </DrawerHeader>
         <Divider />

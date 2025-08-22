@@ -25,6 +25,7 @@ interface Contact {
   id: number;
   executiveId: number;
   waId: string;
+  open: boolean;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: null;
@@ -204,8 +205,28 @@ const ChatArea: React.FC<ChatAreaProps> = ({
   });
 
   const convertApiMessageToMessage = (apiMessage: ApiMessage): Message => {
-    const timestampMs = parseInt(apiMessage.metaTimestamp) * 1000;
+    // ✅ Detectar si el timestamp está en segundos (10 dígitos) o milisegundos (13 dígitos)
+    const timestampStr = apiMessage.metaTimestamp;
+    let timestampMs: number;
+    
+    if (timestampStr.length <= 10) {
+      // Timestamp en segundos - convertir a milisegundos
+      timestampMs = parseInt(timestampStr) * 1000;
+    } else {
+      // Timestamp ya está en milisegundos
+      timestampMs = parseInt(timestampStr);
+    }
+    
     const date = new Date(timestampMs);
+
+    // ✅ Debug logging para verificar timestamps
+    console.log(`🕐 [${apiMessage.sender}] Converting timestamp:`, {
+      metaTimestamp: apiMessage.metaTimestamp,
+      timestampLength: timestampStr.length,
+      timestampMs,
+      date: date.toISOString(),
+      source: (apiMessage as any).source || 'server'
+    });
 
     const timeString = date.toLocaleTimeString("es-CL", {
       hour: "2-digit",
@@ -213,6 +234,9 @@ const ChatArea: React.FC<ChatAreaProps> = ({
       hour12: false,
       timeZone: "America/Santiago",
     });
+
+    console.log(`🕐 [${apiMessage.sender}] Final time:`, timeString);
+    console.log('el contacto', contact);
 
     let sender: "customer" | "agent" | "bot";
     switch (apiMessage.sender) {
@@ -338,66 +362,68 @@ const ChatArea: React.FC<ChatAreaProps> = ({
         </Box>
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          {/* <IconButton size="small" sx={{ color: colors.secondary.var50 }}>
-            <Phone />
-          </IconButton> */}
-          <Button
-            onClick={() => closeChatMutation.mutate(contact.waId)}
-            disabled={closeChatMutation.isPending}
-            size="small"
-            sx={{
-              backgroundColor: "transparent",
-              border: `1.5px solid ${colors.secondary.var80}`,
-              color: colors.secondary.main,
-              fontWeight: 500,
-              textTransform: "none",
-              borderRadius: 2,
-              px: 2.5,
-              py: 0.8,
-              fontSize: "0.875rem",
-              transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
-              "&:hover": {
-                backgroundColor: colors.error.main,
-                color: "white",
-                boxShadow: "0 8px 25px rgba(211, 47, 47, 0.25)",
-                borderColor: colors.primary.main,
-              },
-              "&:active": {
-                transform: "translateY(0)",
-                boxShadow: "0 4px 15px rgba(211, 47, 47, 0.3)",
-              },
-              "&:disabled": {
-                backgroundColor: "transparent",
-                borderColor: colors.secondary.var70,
-                color: colors.secondary.var50,
-                transform: "none",
-                boxShadow: "none",
-                cursor: "not-allowed",
-              },
-            }}
-          >
-            {closeChatMutation.isPending ? (
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Box
-                  sx={{
-                    width: 14,
-                    height: 14,
-                    border: `2px solid ${colors.secondary.var70}`,
-                    borderTop: `2px solid ${colors.error.main}`,
-                    borderRadius: "50%",
-                    animation: "spin 1s linear infinite",
-                    "@keyframes spin": {
-                      "0%": { transform: "rotate(0deg)" },
-                      "100%": { transform: "rotate(360deg)" },
-                    },
-                  }}
-                />
-                Cerrando...
-              </Box>
-            ) : (
-              "Finalizar conversación"
-            )}
-          </Button>
+          {
+            contact.open && (
+              <Button
+                onClick={() => closeChatMutation.mutate(contact.waId)}
+                disabled={closeChatMutation.isPending}
+                size="small"
+                sx={{
+                  backgroundColor: colors.primary.main,
+                  border: `1.5px solid ${colors.secondary.var80}`,
+                  color: colors.secondary.var80,
+                  fontWeight: 500,
+                  textTransform: "none",
+                  borderRadius: 2,
+                  px: 2.5,
+                  py: 0.8,
+                  fontSize: "0.875rem",
+                  transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                  "&:hover": {
+                    backgroundColor: colors.error.main,
+                    color: "white",
+                    boxShadow: "0 8px 25px rgba(211, 47, 47, 0.25)",
+                    borderColor: colors.primary.main,
+                  },
+                  "&:active": {
+                    transform: "translateY(0)",
+                    boxShadow: "0 4px 15px rgba(211, 47, 47, 0.3)",
+                  },
+                  "&:disabled": {
+                    backgroundColor: "transparent",
+                    borderColor: colors.secondary.var70,
+                    color: colors.secondary.var50,
+                    transform: "none",
+                    boxShadow: "none",
+                    cursor: "not-allowed",
+                  },
+                }}
+              >
+                {closeChatMutation.isPending ? (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Box
+                      sx={{
+                        width: 14,
+                        height: 14,
+                        border: `2px solid ${colors.secondary.var70}`,
+                        borderTop: `2px solid ${colors.error.main}`,
+                        borderRadius: "50%",
+                        animation: "spin 1s linear infinite",
+                        "@keyframes spin": {
+                          "0%": { transform: "rotate(0deg)" },
+                          "100%": { transform: "rotate(360deg)" },
+                        },
+                      }}
+                    />
+                    Cerrando...
+                  </Box>
+                ) : (
+                  "Finalizar conversación"
+                )}
+              </Button>
+            )
+          }
+          
         </Box>
       </ChatHeader>
       <MessagesContainer>
@@ -472,7 +498,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({
       </MessagesContainer>
 
       <Box sx={{ p: 2, backgroundColor: colors.secondary.var99 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+        {/* <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
           <Chip
             label="Seleccionar respuesta rápida"
             variant="outlined"
@@ -483,29 +509,30 @@ const ChatArea: React.FC<ChatAreaProps> = ({
               fontSize: "0.75rem",
             }}
           />
-        </Box>
+        </Box> */}
 
         <ChatInput
           fullWidth
           multiline
           maxRows={4}
+          disabled={contact.open === false}
           placeholder="Escribe tu mensaje..."
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           onKeyPress={handleKeyPress}
           InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <IconButton size="small" sx={{ color: colors.secondary.var50 }}>
-                  <AttachFile />
-                </IconButton>
-              </InputAdornment>
-            ),
+            // startAdornment: (
+            //   <InputAdornment position="start">
+            //     <IconButton size="small" sx={{ color: colors.secondary.var50 }}>
+            //       <AttachFile />
+            //     </IconButton>
+            //   </InputAdornment>
+            // ),
             endAdornment: (
               <InputAdornment position="end">
                 <IconButton
                   onClick={handleSendMessage}
-                  disabled={!newMessage.trim()}
+                  disabled={!newMessage.trim() || contact.open === false}
                   sx={{
                     color: newMessage.trim()
                       ? colors.primary.main

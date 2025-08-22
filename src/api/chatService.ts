@@ -98,7 +98,7 @@ export async function getMessages(waId: string) {
     }
 }
 
-export async function getContacts(executiveId: number) {
+export async function getOpenContacts(executiveId: number) {
     try {
         const accessToken = getAccessToken();
         const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/executive_sessions?executiveId=${executiveId}`, {
@@ -131,28 +131,58 @@ export async function getContacts(executiveId: number) {
 }
 
 export async function closeChat(waId: string) {
-    console.log('🔒 API: Cerrando chat para:', waId);
-    const accessToken = getAccessToken();
-    const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/close_session`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json",
-            "Authorization": `Bearer ${accessToken}`
-         },
-        body: JSON.stringify({ waId }),
-    });
-    if (!res.ok) throw new Error("No se pudo cerrar el chat");
-    return res.json();
+    try {
+        console.log('🔒 API: Cerrando chat para:', waId);
+        const accessToken = getAccessToken();
+        const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/close_session`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json",
+                "Authorization": `Bearer ${accessToken}`
+             },
+            body: JSON.stringify({ waId }),
+        });
+        if (!res.ok) throw new Error("No se pudo cerrar el chat");
+        return res.json();
+        
+    } catch (error) {
+        console.error('❌ Error en closeChat:', error);
+        throw new Error("No se pudo cerrar el chat");
+    }
 }
 
 export async function getClosedChats() {
-    console.log('🔍 API: Solicitando chats cerrados');
-    const accessToken = getAccessToken();
-    const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/closed_chats`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json",
-            "Authorization": `Bearer ${accessToken}`
-         },
-    });
-    if (!res.ok) throw new Error("No se pudieron obtener los chats cerrados");
-    return res.json();
+    try {
+        console.log('🔍 API: Solicitando chats cerrados');
+        const accessToken = getAccessToken();
+        const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/closed_chats`, {
+            method: "GET",
+            headers: { "Content-Type": "application/json",
+                "Authorization": `Bearer ${accessToken}`
+             },
+        });
+        if (!res.ok) throw new Error("No se pudieron obtener los chats cerrados");
+        return res.json();
+        
+    } catch (error) {
+        console.error('❌ Error en getClosedChats:', error);
+        throw new Error("No se pudieron obtener los chats cerrados");
+    }
+}
+
+export async function getWaitingChats() {
+    console.log('🔍 API: Solicitando chats en espera');
+    try {
+        const accessToken = getAccessToken();
+        const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/waiting_chats`, {
+            method: "GET",
+            headers: { "Content-Type": "application/json",
+                "Authorization": `Bearer ${accessToken}`
+             },
+        });
+        if (!res.ok) throw new Error("No se pudieron obtener los chats en espera");
+        return res.json();
+    } catch (error) {
+        console.error('❌ Error en getWaitingChats:', error);
+        throw new Error("No se pudieron obtener los chats en espera");
+    }
 }
