@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   Box,
   List,
-  ListItem,
   ListItemButton,
   ListItemText,
   ListItemAvatar,
@@ -13,17 +12,12 @@ import {
   Tabs,
   Tab,
   Badge,
-  Chip,
   Button,
-  IconButton,
 } from '@mui/material';
 import { Search, Person, PersonAdd } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import { colors } from '@/styles/colors';
 import { socketService, type UnreadCount } from '@/api/socketService';
-import { takeChats } from '@/api/chatService';
-import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchSession } from '@/queries/session';
 
 interface Contact {
     id:          number;
@@ -91,36 +85,6 @@ const ContactListItem = styled(ListItemButton)<{ isSelected?: boolean }>(({ them
   },
 }));
 
-const StatusDot = styled(Box)<{ status: 'online' | 'away' | 'offline' }>(({ status }) => ({
-  width: 12,
-  height: 12,
-  borderRadius: '50%',
-  backgroundColor: 
-    status === 'online' ? colors.success.main :
-    status === 'away' ? colors.warning.main :
-    colors.secondary.var60,
-  border: `2px solid ${colors.secondary.var99}`,
-  position: 'absolute',
-  bottom: 2,
-  right: 2,
-}));
-
-const PriorityChip = styled(Chip)<{ priority: 'alta' | 'media' | 'baja' }>(({ priority }) => ({
-  height: 20,
-  fontSize: '0.7rem',
-  backgroundColor: 
-    priority === 'alta' ? colors.error.var90 :
-    priority === 'media' ? colors.warning.var90 :
-    colors.success.var90,
-  color: 
-    priority === 'alta' ? colors.error.main :
-    priority === 'media' ? colors.warning.main :
-    colors.success.main,
-  '& .MuiChip-label': {
-    padding: '0 8px',
-  },
-}));
-
 const ContactItem = React.memo<{
   contact: any;
   isSelected: boolean;
@@ -137,14 +101,6 @@ const ContactItem = React.memo<{
   const badgeContent = getBadgeContent(contact);
 
   const finalBadgeVisible = badgeVisible && badgeContent > 0;
-
-  console.log(`🏷️ ContactItem ${contact.waId}:`, {
-    badgeVisible,
-    badgeContent,
-    finalBadgeVisible,
-    unreadCount: contact.unreadCount,
-    finalBadgeValue: finalBadgeVisible ? badgeContent : 0
-  });
 
   const handleTakeChat = async (e: React.MouseEvent) => {
     e.stopPropagation(); // Evitar que se seleccione el contacto
@@ -169,7 +125,6 @@ const ContactItem = React.memo<{
       onClick={() => {
         // No permitir seleccionar contactos en la pestaña "En Espera"
         if (activeTab === 'espera') {
-          console.log('🚫 No se puede seleccionar contactos en espera');
           return;
         }
         onContactSelect(contact);

@@ -54,7 +54,7 @@ class SocketService {
   private unreadCallback: ((data: UnreadCount[]) => void) | null = null;
   private newContactCallback: ((contact: any) => void) | null = null;
 
-  connect(url: string = 'http://localhost:3000', options?: { executiveId?: number }): Promise<void> {
+  connect(url: string =  import.meta.env.VITE_API_WHATSAPP_URL || 'http://localhost:3000', options?: { executiveId?: number }): Promise<void> {
     if (this.connectionPromise) {
       return this.connectionPromise;
     }
