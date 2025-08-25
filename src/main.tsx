@@ -58,8 +58,8 @@ if (!rootElement.innerHTML) {
         <QueryClientProvider client={queryClient}>
           <SocketProvider socketUrl={API_WHATSAPP_URL}>
             <RouterProvider router={router} />
+            {/* <ReactQueryDevtools initialIsOpen={false} /> */}
           </SocketProvider>
-          <ReactQueryDevtools initialIsOpen={false} />
         </QueryClientProvider>
       </ThemeProvider>
     </StrictMode>,

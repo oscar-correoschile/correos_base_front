@@ -55,26 +55,17 @@ export const Route = createFileRoute("/login")({
             throw redirect({ to: "/dashboard" });
           }
         } else if (response.status === 401 || response.status === 403) {
-          // Solo eliminar el token si es específicamente un error de autenticación
-          console.log("Token expired or invalid, clearing token");
           localStorage.removeItem("access_token");
         } else {
-          // Para otros errores HTTP (500, etc.), asumir que el token es válido y redirigir
-          console.log("Server error, but assuming token is valid");
           throw redirect({ to: "/dashboard" });
         }
       } catch (error) {
-        // Si hay error de red u otro, asumir que el token es válido y redirigir
         if (error instanceof Response) {
-          // Si es un redirect, permitir que se propague
           throw error;
         }
-        console.log("Network error, but keeping token and redirecting:", error);
         throw redirect({ to: "/dashboard" });
       }
     }
-    
-    // Si no hay token, permitir acceso al login
     return null;
   },
 });
@@ -156,7 +147,6 @@ function LoginForm() {
 
   const mutation = useMutation({
     mutationFn: async (value: LoginForm) => {
-      console.log(import.meta.env);
       const response = await fetch(`${API_WHATSAPP_URL}/auth/login`, {
         method: "POST",
         headers: {
@@ -168,7 +158,6 @@ function LoginForm() {
         }),
         // credentials: "include", // Para incluir cookies
       });
-      console.log("Login response:", response);
       const data = await response.json();
       localStorage.setItem("access_token", data.access_token);
       if (!response.ok) {
@@ -178,13 +167,11 @@ function LoginForm() {
       return data;
     },
     onSuccess: async (data) => {
-      console.log("Login successful", data);
       setError(null);
       await refetch();
       navigate({ to: "/" });
     },
     onError: (error) => {
-      console.error("Login failed", error);
       setError("Usuario o contraseña inválidos");
     },
   });
@@ -214,16 +201,6 @@ function LoginForm() {
   const handleClickOpen = () => {
     setOpen(true);
   };
-
-  const handleClose = () => {
-    setOpen(false);
-  };
-
-  const handleSubmitPasswordRecovery = async (email: string) => {
-    console.log("Password recovery for:", email);
-    setOpen(false);
-  };
-
   return (
     <Container>
       <CssBaseline enableColorScheme />

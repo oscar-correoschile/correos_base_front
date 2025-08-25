@@ -205,28 +205,16 @@ const ChatArea: React.FC<ChatAreaProps> = ({
   });
 
   const convertApiMessageToMessage = (apiMessage: ApiMessage): Message => {
-    // ✅ Detectar si el timestamp está en segundos (10 dígitos) o milisegundos (13 dígitos)
     const timestampStr = apiMessage.metaTimestamp;
     let timestampMs: number;
     
     if (timestampStr.length <= 10) {
-      // Timestamp en segundos - convertir a milisegundos
       timestampMs = parseInt(timestampStr) * 1000;
     } else {
-      // Timestamp ya está en milisegundos
       timestampMs = parseInt(timestampStr);
     }
     
     const date = new Date(timestampMs);
-
-    // ✅ Debug logging para verificar timestamps
-    console.log(`🕐 [${apiMessage.sender}] Converting timestamp:`, {
-      metaTimestamp: apiMessage.metaTimestamp,
-      timestampLength: timestampStr.length,
-      timestampMs,
-      date: date.toISOString(),
-      source: (apiMessage as any).source || 'server'
-    });
 
     const timeString = date.toLocaleTimeString("es-CL", {
       hour: "2-digit",
@@ -235,8 +223,6 @@ const ChatArea: React.FC<ChatAreaProps> = ({
       timeZone: "America/Santiago",
     });
 
-    console.log(`🕐 [${apiMessage.sender}] Final time:`, timeString);
-    console.log('el contacto', contact);
 
     let sender: "customer" | "agent" | "bot";
     switch (apiMessage.sender) {

@@ -47,6 +47,7 @@ interface Executive {
 interface ContactListProps {
   contacts: Contact[];
   allContacts?: Contact[];
+  waitingContacts?: Contact[];
   selectedContact: Contact | null;
   onContactSelect: (contact: Contact) => void;
   activeTab: 'abierto' | 'espera' | 'cerrado';
@@ -110,7 +111,6 @@ const ContactItem = React.memo<{
     setIsTakingChat(true);
     try {
       await onTakeChat(contact);
-      console.log('✅ Chat tomado exitosamente:', contact.waId);
     } catch (error) {
       console.error('❌ Error tomando chat:', error);
     } finally {
@@ -228,6 +228,7 @@ const ContactItem = React.memo<{
 const ContactList: React.FC<ContactListProps> = ({
   contacts,
   allContacts = [],
+  waitingContacts = [],
   selectedContact,
   onContactSelect,
   activeTab,
@@ -247,61 +248,46 @@ const ContactList: React.FC<ContactListProps> = ({
       }
     });
     setRealtimeUnreadCounts(initialMap);
-    console.log('🚀 Inicializando unread counts:', Object.fromEntries(initialMap));
   }, []); // Solo ejecutar al montar
   
   // Efecto para escuchar actualizaciones de unread counts en tiempo real
   React.useEffect(() => {
-    console.log('🔌 Configurando listener para unread counts...');
-    
-    // Verificar estado de conexión del socket
-    console.log('🔍 Estado del socket:', {
-      service: !!socketService,
-      // connected: socketService.isConnected() // Si existe este método
-    });
-    
+    // ✅ Función optimizada que busca en todos los contactos disponibles
     const handleUnreadUpdate = (unreadData: UnreadCount[]) => {
-      console.log('📨 Actualizacion de unread counts recibida:', unreadData);
-      console.log('📋 Contactos disponibles para mapear:', contacts.map(c => ({ id: c.id, waId: c.waId })));
-      
       setRealtimeUnreadCounts(prevMap => {
         const newMap = new Map(prevMap);
-        console.log('📊 Estado anterior del map:', Object.fromEntries(prevMap));
         
-        // Actualizar con los nuevos datos
         unreadData.forEach(item => {
-          // Buscar el contact.id correspondiente al waId
-          const contact = contacts.find(c => c.waId === item.waId);
+          // ✅ Buscar en todos los contactos disponibles (contacts + allContacts)
+          const allContactsList = [...contacts, ...allContacts];
+          const contact = allContactsList.find(c => c.waId === item.waId);
+          
           if (contact) {
             if (item.count > 0) {
               newMap.set(contact.id, item.count);
-              console.log(`✅ Actualizando unread count para contacto ${contact.id} (${contact.waId}): ${item.count}`);
             } else {
               newMap.delete(contact.id);
-              console.log(`🗑️ Removiendo unread count para contacto ${contact.id} (${contact.waId})`);
             }
-          } else {
-            console.warn(`⚠️ No se encontró contacto con waId: ${item.waId}`);
           }
         });
-        
-        console.log('📊 Estado nuevo del map:', Object.fromEntries(newMap));
         return newMap;
       });
     };
 
     try {
       socketService.onUnreadCountUpdate(handleUnreadUpdate);
-      console.log('✅ Listener de unread counts configurado');
     } catch (error) {
       console.error('❌ Error configurando listener de unread counts:', error);
     }
-    
-    // Cleanup
+
     return () => {
-      console.log('🧹 Limpiando listener de unread counts');
+      try {
+        socketService.removeListener('unread_count_update', handleUnreadUpdate);
+      } catch (error) {
+        console.error('❌ Error removiendo listener:', error);
+      }
     };
-  }, [contacts]); // Dependemos de contacts para poder hacer el mapeo waId -> id
+  }, []);
   
   // Crear un mapa de unreadCounts que combine datos iniciales + tiempo real
   const unreadCountsMap = React.useMemo(() => {
@@ -327,135 +313,88 @@ const ContactList: React.FC<ContactListProps> = ({
       }
     });
     
-    console.log('� UnreadCounts map actualizado:', {
-      fromProps: propsCount,
-      fromRealtime: realtimeCount,
-      total: map.size,
-      finalMap: Object.fromEntries(map)
-    });
-    
     return map;
   }, [contacts, realtimeUnreadCounts]);
 
-  // Función para manejar selección de contacto
   const handleContactSelect = React.useCallback((contact: any) => {
-    console.log(`[handleContactSelect] Contacto seleccionado: ${contact.waId}`);
-    
-    // Marcar el contacto como visitado
+
     setVisitedContacts(prev => {
       const newSet = new Set(prev);
       if (!newSet.has(contact.id)) {
         newSet.add(contact.id);
-        console.log(`[handleContactSelect] Marcando contacto ${contact.id} como visitado`);
       }
       return newSet;
     });
-    
-    // ✅ Limpiar el unread count cuando se selecciona
+
     setRealtimeUnreadCounts(prev => {
       const newMap = new Map(prev);
       if (newMap.has(contact.id)) {
         newMap.delete(contact.id);
-        console.log(`[handleContactSelect] Limpiando unread count para contacto ${contact.id}`);
       }
       return newMap;
     });
-    
-    // ✅ Notificar al servidor que los mensajes se leyeron
+
     try {
       socketService.markAsRead(contact.waId);
-      console.log(`[handleContactSelect] Marcando mensajes como leídos en servidor: ${contact.waId}`);
     } catch (error) {
       console.error(`[handleContactSelect] Error marcando como leído:`, error);
     }
-    
-    // Llamar la función original
+
     onContactSelect(contact);
   }, [onContactSelect]);
-  
-  // Función para determinar si mostrar badge
+
   const shouldShowBadge = React.useCallback((contact: any) => {
     const isSelected = selectedContact?.id === contact.id;
     const hasUnread = (unreadCountsMap.get(contact.id) || 0) > 0;
     const isVisited = visitedContacts.has(contact.id);
-    
-    console.log(`[shouldShowBadge] Contact ${contact.id}:`, {
-      isSelected,
-      hasUnread,
-      isVisited,
-      activeTab,
-      unreadCount: unreadCountsMap.get(contact.id) || 0,
-    });
-    
-    // ✅ NUEVA REGLA: Contactos cerrados NUNCA muestran badges
+
     if (activeTab === 'cerrado') {
-      console.log(`[shouldShowBadge] Contact ${contact.id}: NO badge porque es tab cerrado`);
       return false;
     }
-    
-    // No mostrar badge si está seleccionado actualmente
+
     if (isSelected) {
       return false;
     }
-    
-    // ✅ PRIORIDAD 1: Si tiene mensajes no leídos, SIEMPRE mostrar badge (sin importar si fue visitado)
+
     if (hasUnread) {
       return true;
     }
-    
-    // ✅ PRIORIDAD 2: Si es un contacto nuevo (no visitado), mostrar badge
+
     if (!isVisited) {
       return true;
     }
-    
-    // En todos los demás casos, no mostrar badge
     return false;
   }, [selectedContact?.id, unreadCountsMap, visitedContacts, activeTab]);
-  
-  // Función para obtener el contenido del badge
+
   const getBadgeContent = React.useCallback((contact: any) => {
     const unreadCount = unreadCountsMap.get(contact.id) || 0;
     const isVisited = visitedContacts.has(contact.id);
-    
-    console.log(`[getBadgeContent] Contact ${contact.id}:`, {
-      unreadCount,
-      isVisited
-    });
-    
-    // Si el contacto ha sido visitado, mostrar solo el número de mensajes no leídos
+
     if (isVisited) {
       return unreadCount;
     }
-    
-    // Si no ha sido visitado, es un contacto nuevo - mostrar 1 o el número de mensajes no leídos si los hay
+
     return Math.max(1, unreadCount);
   }, [unreadCountsMap, visitedContacts]);
-  
-  // ✅ Calcular contadores por estado - Memoizado estable
+
   const contactCounts = React.useMemo(() => {
     if (!allContacts.length) {
       return { abierto: 0, espera: 0, cerrado: 0 };
     }
 
-    // ✅ Usar el campo 'activo' para determinar contactos abiertos y cerrados
-    const abierto = allContacts.filter(contact => contact.activo === true).length;
-    const espera = 0; // Implementar cuando tengamos contactos con status 'WAITING'
-    const cerrado = allContacts.filter(contact => contact.activo === false).length;
+    const abierto = allContacts.filter(contact => contact.open === true).length;
+    const espera = waitingContacts.length;
+    const cerrado = 0;
     
     return { abierto, espera, cerrado };
-  }, [allContacts]); // Solo depende de allContacts
-  
-  // ✅ Filtrar contactos - Memoizado estable
+  }, [allContacts, waitingContacts]); // ✅ Depender de waitingContacts
+
   const filteredContacts = React.useMemo(() => {
     return contacts.filter(contact =>
       contact.waId.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [contacts, searchQuery]); // Solo depende de contacts y searchQuery
-  
-  console.log(filteredContacts);
-  // const getInitials = (name: string) => {
-  //   return name.split(' ').map(n => n[0]).join('').toUpperCase();
-  // };
+  }, [contacts, searchQuery]);
+
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

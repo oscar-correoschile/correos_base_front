@@ -557,7 +557,7 @@ export const LayoutComponent = ({
       </Drawer>
       <Main open={open}>
         <Outlet />
-        <TanStackRouterDevtools />
+        {/* <TanStackRouterDevtools /> */}
         {/* <DrawerHeader /> */}
         {/* <Typography sx={{ marginBottom: 2 }}>
           Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do

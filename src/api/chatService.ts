@@ -8,7 +8,6 @@ const getAccessToken = (): string => {
   return token;
 };
 export async function sendMessage(waId: string, message: string) {
-    console.log({ waId, message });
     try {
         const accessToken = getAccessToken();
         const res = await fetch(`${VITE_API_WHATSAPP_URL}/meta/send_message`, {
@@ -26,7 +25,6 @@ export async function sendMessage(waId: string, message: string) {
 
         const text = await res.text();
         if (!text || text.trim() === '') {
-            console.log('✅ Mensaje enviado - respuesta vacía del servidor');
             return { 
                 id: Date.now(), 
                 success: true, 
@@ -38,7 +36,6 @@ export async function sendMessage(waId: string, message: string) {
         try {
             return JSON.parse(text);
         } catch (jsonError) {
-            console.warn('⚠️ Respuesta no es JSON válido:', text);
             return { 
                 id: Date.now(), 
                 success: true, 
@@ -47,14 +44,12 @@ export async function sendMessage(waId: string, message: string) {
             };
         }
     } catch (error) {
-        console.error('❌ Error en sendMessage:', error);
         const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
         throw new Error(`Error enviando mensaje: ${errorMessage}`);
     }
 }
 
 export async function getMessages(waId: string) {
-    console.log('🔍 API: Solicitando mensajes para:', waId);
     try {
         const accessToken = getAccessToken();
         const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/chats?waId=${waId}&take=50`, {
@@ -70,30 +65,16 @@ export async function getMessages(waId: string) {
         
         const text = await res.text();
         if (!text || text.trim() === '') {
-            console.log('⚠️ No hay mensajes para:', waId);
             return [];
         }
         
         try {
             const messages = JSON.parse(text);
-            console.log('📨 API: Mensajes recibidos:', {
-                waId,
-                count: messages.length,
-                lastMessage: messages[messages.length - 1],
-                allMessageIds: messages.map((m: any) => m.id),
-                allTimestamps: messages.map((m: any) => ({
-                    id: m.id,
-                    timestamp: m.metaTimestamp,
-                    message: m.message.slice(0, 30) + '...'
-                }))
-            });
             return messages;
         } catch (jsonError) {
-            console.error('❌ Error parsing JSON para getMessages:', text);
             return [];
         }
     } catch (error) {
-        console.error('❌ Error en getMessages:', error);
         throw new Error("No se pudieron obtener los mensajes");
     }
 }
@@ -114,25 +95,21 @@ export async function getOpenContacts(executiveId: number) {
         
         const text = await res.text();
         if (!text || text.trim() === '') {
-            console.log('⚠️ No hay contactos para executive:', executiveId);
             return [];
         }
         
         try {
             return JSON.parse(text);
         } catch (jsonError) {
-            console.error('❌ Error parsing JSON para getContacts:', text);
             return [];
         }
     } catch (error) {
-        console.error('❌ Error en getContacts:', error);
         throw new Error("No se pudieron obtener los contactos");
     }
 }
 
 export async function closeChat(waId: string) {
     try {
-        console.log('🔒 API: Cerrando chat para:', waId);
         const accessToken = getAccessToken();
         const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/close_session`, {
             method: "POST",
@@ -145,14 +122,12 @@ export async function closeChat(waId: string) {
         return res.json();
         
     } catch (error) {
-        console.error('❌ Error en closeChat:', error);
         throw new Error("No se pudo cerrar el chat");
     }
 }
 
 export async function getClosedChats() {
     try {
-        console.log('🔍 API: Solicitando chats cerrados');
         const accessToken = getAccessToken();
         const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/closed_chats`, {
             method: "GET",
@@ -164,13 +139,11 @@ export async function getClosedChats() {
         return res.json();
         
     } catch (error) {
-        console.error('❌ Error en getClosedChats:', error);
         throw new Error("No se pudieron obtener los chats cerrados");
     }
 }
 
 export async function getWaitingChats() {
-    console.log('🔍 API: Solicitando chats en espera');
     
     try {
         const accessToken = getAccessToken();
@@ -184,31 +157,19 @@ export async function getWaitingChats() {
         });
         if (!res.ok) {
             const errorText = await res.text();
-            console.error('❌ Error en respuesta:', errorText);
             throw new Error(`No se pudieron obtener los chats en espera: ${res.status} - ${errorText}`);
         }
         
         const data = await res.json();
-        console.log('📋 Datos recibidos de get_waiting:', {
-            isArray: Array.isArray(data),
-            length: Array.isArray(data) ? data.length : 'No es array',
-            data: data,
-            timestamp: new Date().toISOString()
-        });
         
         return data;
     } catch (error) {
-        console.error('❌ Error en getWaitingChats:', error);
         throw new Error("No se pudieron obtener los chats en espera");
     }
 }
 
 export async function executiveAvailable(executiveId: number, available: boolean) {
     try {
-        console.log('🔄 APIaaaaaaaa: Cambiando disponibilidad del ejecutivo:', {
-            executiveId,
-            available
-        });
         const accessToken = getAccessToken();
         const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/toggle_executive_availability`, {
             method: "POST",
@@ -220,17 +181,12 @@ export async function executiveAvailable(executiveId: number, available: boolean
         if (!res.ok) throw new Error("No se pudo obtener el estado del ejecutivo");
         return res.json();
     } catch (error) {
-        console.error('❌ Error en executiveState:', error);
         throw new Error("No se pudo obtener el estado del ejecutivo");
     }
 }
 
 export async function takeChats(waId: string, executiveId: number) {
     try {
-        console.log('🔄 API: Asignando chat a ejecutivo:', {
-            waId,
-            executiveId
-        });
         const accessToken = getAccessToken();
         const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/take_chats`, {
             method: "POST",
@@ -242,7 +198,6 @@ export async function takeChats(waId: string, executiveId: number) {
         if (!res.ok) throw new Error("No se pudo asignar el chat");
         return res.json();
     } catch (error) {
-        console.error('❌ Error en takeChats:', error);
         throw new Error("No se pudo asignar el chat");
     }
 }
