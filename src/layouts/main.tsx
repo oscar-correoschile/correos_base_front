@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { styled } from "@mui/material/styles";
 import Box from "@mui/material/Box";
 import Drawer from "@mui/material/Drawer";
@@ -14,10 +14,11 @@ import Button from "@mui/material/Button";
 import AccountCircle from "@mui/icons-material/AccountCircle";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import PauseCircleIcon from "@mui/icons-material/PauseCircle";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import MenuItem from "@mui/material/MenuItem";
 import Menu from "@mui/material/Menu";
 import Avatar from "@mui/material/Avatar";
-import Chip from "@mui/material/Chip";
+// import Chip from "@mui/material/Chip";
 
 import ListItem from "@mui/material/ListItem";
 import ListItemButton from "@mui/material/ListItemButton";
@@ -26,7 +27,7 @@ import ListItemText from "@mui/material/ListItemText";
 import InboxIcon from "@mui/icons-material/MoveToInbox";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import { Outlet } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
+// import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
 import { createLink } from "@tanstack/react-router";
 import { Link as MUILink } from "@mui/material";
@@ -97,7 +98,6 @@ const DrawerHeader = styled("div")(({ theme }) => ({
   display: "flex",
   alignItems: "center",
   padding: theme.spacing(0, 1),
-  // necessary for content to be below app bar
   ...theme.mixins.toolbar,
   justifyContent: "flex-end",
 }));
@@ -111,6 +111,7 @@ export const LayoutComponent = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [availabilityAnchorEl, setAvailabilityAnchorEl] = useState<null | HTMLElement>(null); // ✅ Nuevo estado
   const [isUpdatingAvailability, setIsUpdatingAvailability] = useState(false);
 
   const navigate = useNavigate();
@@ -124,67 +125,65 @@ export const LayoutComponent = ({
     setAnchorEl(null);
   };
 
-  const handleToggleAvailability = async () => {
+  const handleAvailabilityMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setAvailabilityAnchorEl(event.currentTarget);
+  };
+
+  const handleAvailabilityClose = () => {
+    setAvailabilityAnchorEl(null);
+  };
+
+  const handleSetAvailable = async (available: boolean) => {
     if (!session?.executive?.id || isUpdatingAvailability) return;
     
     setIsUpdatingAvailability(true);
+    
     try {
-      const newAvailabilityStatus = !session.executive.available;
-
-      // ✅ Actualización optimista INMEDIATA
-      queryClientHook.setQueryData(['session'], (oldSession: any) => {
-        if (!oldSession?.executive) return oldSession;
-        
+      queryClientHook.setQueryData(['session'], (oldData: any) => {
+        if (!oldData) return oldData;
         return {
-          ...oldSession,
+          ...oldData,
           executive: {
-            ...oldSession.executive,
-            available: newAvailabilityStatus,
-            updatedAt: new Date().toISOString() // Actualizar timestamp
+            ...oldData.executive,
+            available: available,
           }
         };
       });
 
-      // Llamar al servicio - sabemos que devuelve { message, result }
-      const response = await executiveAvailable(session.executive.id, newAvailabilityStatus);
-      
+      const response = await executiveAvailable(session.executive.id, available);
 
-      // ✅ Actualizar con los datos reales del servidor
-      if (response?.result) {
-        queryClientHook.setQueryData(['session'], (oldSession: any) => {
-          if (!oldSession) return oldSession;
-          
-          return {
-            ...oldSession,
-            executive: {
-              ...oldSession.executive,
-              ...response.result, // Usar todos los datos del servidor
-            }
-          };
-        });
+      if (response.message && response.message.includes('successfully')) {
+
+        if (response.result) {
+          queryClientHook.setQueryData(['session'], (oldData: any) => {
+            if (!oldData) return oldData;
+            return {
+              ...oldData,
+              executive: {
+                ...oldData.executive,
+                ...response.result,
+              }
+            };
+          });
+        }
+      } else {
+        throw new Error('Error del servidor');
       }
       
     } catch (error) {
-      console.error('❌ Error actualizando disponibilidad:', error);
-      
-      // ✅ Revertir actualización optimista en caso de error
-      queryClientHook.setQueryData(['session'], (oldSession: any) => {
-        if (!oldSession?.executive) return oldSession;
-        
+      queryClientHook.setQueryData(['session'], (oldData: any) => {
+        if (!oldData) return oldData;
         return {
-          ...oldSession,
+          ...oldData,
           executive: {
-            ...oldSession.executive,
-            available: session.executive.available // Revertir al estado original
+            ...oldData.executive,
+            available: session.executive.available
           }
         };
       });
-      
-      alert('Error al actualizar el estado. Por favor intenta nuevamente.');
-      
     } finally {
       setIsUpdatingAvailability(false);
-      handleClose();
+      handleAvailabilityClose(); // ✅ Cerrar menú
     }
   };
 
@@ -203,10 +202,11 @@ export const LayoutComponent = ({
       const API_WHATSAPP_URL = import.meta.env.VITE_API_WHATSAPP_URL || "http://localhost:3000";
       const response = await fetch(`${API_WHATSAPP_URL}/auth/logout`, {
         method: "POST",
-        credentials: "include",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("access_token")}`,
         },
+        body: JSON.stringify({ logout: true }),
       });
 
       if (!response.ok) {
@@ -219,7 +219,6 @@ export const LayoutComponent = ({
 
       navigate({ to: "/login" });
     } catch (error) {
-      console.error("Logout failed:", error);
       localStorage.removeItem("access_token");
       navigate({ to: "/login" });
     }
@@ -238,7 +237,6 @@ export const LayoutComponent = ({
         },
       ];
 
-      // Agregar elementos para admin
       if (user?.role === 'admin') {
         baseItems.push({
           text: "Administración",
@@ -269,42 +267,7 @@ export const LayoutComponent = ({
       .slice(0, 2);
   };
 
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (session?.executive?.id && session.executive.available) {
-        
-        const API_WHATSAPP_URL = import.meta.env.VITE_API_WHATSAPP_URL || "http://localhost:3000";
-        const token = localStorage.getItem("access_token");
-        
-        if (token) {
-          try {
-            fetch(`${API_WHATSAPP_URL}/maintainer/toggle_executive_availability`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify({
-                executiveId: session.executive.id,
-                available: false
-              }),
-              keepalive: true
-            }).catch(error => {
-              console.warn('No se pudo marcar como no disponible al cerrar:', error);
-            });
-          } catch (error) {
-            console.warn('Error al marcar como no disponible:', error);
-          }
-        }
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [session?.executive?.id, session?.executive?.available]);
+  // Eliminado: No marcar como no disponible al recargar/cerrar la página
 
   return (
     <Box sx={{ flexGrow: 1 }}>
@@ -315,6 +278,99 @@ export const LayoutComponent = ({
 
           {!isPending && session ? (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              
+              {/* ✅ Menú desplegable de disponibilidad independiente */}
+              <Box sx={{ position: 'relative' }}>
+                <Button
+                  onClick={handleAvailabilityMenu}
+                  disabled={isUpdatingAvailability}
+                  variant="outlined"
+                  startIcon={
+                    session.executive?.available ? (
+                      <CheckCircleIcon sx={{ color: colors.success.main }} />
+                    ) : (
+                      <PauseCircleIcon sx={{ color: colors.error.main }} />
+                    )
+                  }
+                  endIcon={<KeyboardArrowDownIcon />}
+                  sx={{
+                    borderColor: session.executive?.available ? colors.success.main : colors.error.main,
+                    color: session.executive?.available ? colors.success.main : colors.error.main,
+                    fontWeight: 500,
+                    textTransform: 'none',
+                    '&:hover': {
+                      borderColor: session.executive?.available ? colors.success.var80 : colors.error.var80,
+                      backgroundColor: session.executive?.available ? colors.success.var95 : colors.error.var95,
+                    },
+                    '&:disabled': {
+                      opacity: 0.6
+                    }
+                  }}
+                >
+                  {isUpdatingAvailability 
+                    ? "Actualizando..." 
+                    : session.executive?.available 
+                      ? "Disponible" 
+                      : "No Disponible"
+                  }
+                </Button>
+                
+                <Menu
+                  id="availability-menu"
+                  anchorEl={availabilityAnchorEl}
+                  open={Boolean(availabilityAnchorEl)}
+                  onClose={handleAvailabilityClose}
+                  anchorOrigin={{
+                    vertical: 'bottom',
+                    horizontal: 'left',
+                  }}
+                  transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'left',
+                  }}
+                  sx={{
+                    '& .MuiPaper-root': {
+                      borderRadius: '8px',
+                      minWidth: '180px',
+                      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+                      border: `1px solid ${colors.secondary.var80}`
+                    }
+                  }}
+                >
+                  <MenuItem 
+                    onClick={() => handleSetAvailable(true)}
+                    disabled={isUpdatingAvailability || session.executive?.available}
+                    sx={{ 
+                      py: 1.5,
+                      '&.Mui-disabled': {
+                        opacity: 0.5
+                      }
+                    }}
+                  >
+                    <CheckCircleIcon sx={{ mr: 2, color: colors.success.main }} />
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      Disponible
+                    </Typography>
+                  </MenuItem>
+                  
+                  <MenuItem 
+                    onClick={() => handleSetAvailable(false)}
+                    disabled={isUpdatingAvailability || !session.executive?.available}
+                    sx={{ 
+                      py: 1.5,
+                      '&.Mui-disabled': {
+                        opacity: 0.5
+                      }
+                    }}
+                  >
+                    <PauseCircleIcon sx={{ mr: 2, color: colors.error.main }} />
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      No Disponible
+                    </Typography>
+                  </MenuItem>
+                </Menu>
+              </Box>
+
               {/* Información del ejecutivo */}
               <Box sx={{ 
                 display: 'flex', 
@@ -353,40 +409,15 @@ export const LayoutComponent = ({
                   >
                     {session.executive?.name || 'Usuario'}
                   </Typography>
-                  <Chip
-                    label={
-                      isUpdatingAvailability 
-                        ? "Actualizando..." 
-                        : session.executive?.available 
-                          ? "Disponible" 
-                          : "No Disponible"
-                    }
-                    size="small"
+                  <Typography
+                    variant="caption"
                     sx={{
-                      height: '18px',
-                      fontSize: '10px',
-                      fontWeight: 500,
-                      backgroundColor: isUpdatingAvailability
-                        ? colors.secondary.var90
-                        : session.executive?.available 
-                          ? colors.success.var95 
-                          : colors.error.var95,
-                      color: isUpdatingAvailability
-                        ? colors.secondary.var50
-                        : session.executive?.available 
-                          ? colors.success.var30 
-                          : colors.error.var30,
-                      '& .MuiChip-label': {
-                        px: 1
-                      },
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      '&:hover': {
-                        opacity: 0.8
-                      }
+                      color: colors.secondary.var50,
+                      lineHeight: 1.2
                     }}
-                    
-                  />
+                  >
+                    {session.executive?.email}
+                  </Typography>
                 </Box>
               </Box>
 
@@ -422,28 +453,7 @@ export const LayoutComponent = ({
                   </Typography>
                 </Box>
                 
-                {/* Estado de disponibilidad */}
-                <MenuItem 
-                  onClick={handleToggleAvailability} 
-                  disabled={isUpdatingAvailability}
-                  sx={{ py: 1.5 }}
-                >
-                  {session.executive?.available ? (
-                    <PauseCircleIcon sx={{ mr: 2, color: colors.error.main }} />
-                  ) : (
-                    <CheckCircleIcon sx={{ mr: 2, color: colors.success.main }} />
-                  )}
-                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {session.executive?.available ? 'Marcar como No Disponible' : 'Marcar como Disponible'}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: colors.secondary.var50 }}>
-                      Estado actual: {session.executive?.available ? 'Disponible' : 'No Disponible'}
-                    </Typography>
-                  </Box>
-                </MenuItem>
-                
-                <Divider />
+                {/* Divider removido - ya no hay MenuItem de disponibilidad aquí */}
                 {/* <MenuItem onClick={handleClose} sx={{ py: 1.5 }}>
                   <AccountCircle sx={{ mr: 2, color: colors.secondary.var50 }} />
                   Perfil
