@@ -53,6 +53,7 @@ interface ContactListProps {
   activeTab: 'abierto' | 'espera' | 'cerrado';
   onTabChange: (tab: 'abierto' | 'espera' | 'cerrado') => void;
   onTakeChat?: (contact: Contact) => Promise<void>;
+  executiveAvailable?: boolean;
 }
 
 const SearchField = styled(TextField)(({ theme }) => ({
@@ -94,7 +95,8 @@ const ContactItem = React.memo<{
   getBadgeContent: (contact: any) => number;
   activeTab: 'abierto' | 'espera' | 'cerrado';
   onTakeChat?: (contact: any) => Promise<void>;
-}>(({ contact, isSelected, onContactSelect, shouldShowBadge, getBadgeContent, activeTab, onTakeChat }) => {
+  executiveAvailable?: boolean;
+}>(({ contact, isSelected, onContactSelect, shouldShowBadge, getBadgeContent, activeTab, onTakeChat, executiveAvailable }) => {
   
   const [isTakingChat, setIsTakingChat] = useState(false);
   
@@ -191,7 +193,7 @@ const ContactItem = React.memo<{
               <Button
                 size="small"
                 variant="contained"
-                disabled={isTakingChat}
+                   disabled={isTakingChat || executiveAvailable === false}
                 onClick={handleTakeChat}
                 sx={{
                   minWidth: 'auto',
@@ -207,6 +209,7 @@ const ContactItem = React.memo<{
                   }
                 }}
                 startIcon={isTakingChat ? undefined : <PersonAdd sx={{ fontSize: '14px !important' }} />}
+                title={!executiveAvailable ? 'Debes estar disponible para tomar un chat' : ''}
               >
                 {isTakingChat ? 'Tomando...' : 'Tomar'}
               </Button>
@@ -234,6 +237,7 @@ const ContactList: React.FC<ContactListProps> = ({
   activeTab,
   onTabChange,
   onTakeChat,
+  executiveAvailable,
 }) => {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [visitedContacts, setVisitedContacts] = React.useState<Set<string>>(new Set());
@@ -501,6 +505,7 @@ const ContactList: React.FC<ContactListProps> = ({
             getBadgeContent={getBadgeContent}
             activeTab={activeTab}
             onTakeChat={onTakeChat}
+            executiveAvailable={executiveAvailable}
           />
         ))}
       </List>

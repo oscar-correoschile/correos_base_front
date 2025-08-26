@@ -566,7 +566,7 @@ const Dashboard: React.FC = () => {
       }
       
       // Llamar al servicio takeChats con waId y executiveId
-      await takeChats(contact.waId, session.executive.id);
+      await takeChats(contact.waId, session.executive.id, session.executive.name);
       
       // Invalidar y refrescar ambas queries
       await queryClient.invalidateQueries({
@@ -678,6 +678,14 @@ const Dashboard: React.FC = () => {
             Asistente Humano
           </Typography>
         </Box>
+        {/* Mensaje si el ejecutivo está no disponible */}
+        {session?.executive?.available === false && (
+          <Box sx={{ p: 2, background: '#fff3cd', border: '1px solid #ffeeba', borderRadius: 1, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="body2" sx={{ color: '#856404', fontWeight: 500 }}>
+              ⚠️ Debes estar <b>disponible</b> para tomar chats.
+            </Typography>
+          </Box>
+        )}
         <ContactList
           contacts={filteredContacts}
           allContacts={allContactsWithUnread}
@@ -687,6 +695,7 @@ const Dashboard: React.FC = () => {
           activeTab={activeTab}
           onTabChange={handleTabChange}
           onTakeChat={handleTakeChat}
+          executiveAvailable={session?.executive?.available}
         />
       </SidebarContainer>
 

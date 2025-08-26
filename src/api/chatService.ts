@@ -185,7 +185,7 @@ export async function executiveAvailable(executiveId: number, available: boolean
     }
 }
 
-export async function takeChats(waId: string, executiveId: number) {
+export async function takeChats(waId: string, executiveId: number, executiveName: string) {
     try {
         const accessToken = getAccessToken();
         const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/take_chats`, {
@@ -193,7 +193,7 @@ export async function takeChats(waId: string, executiveId: number) {
             headers: { "Content-Type": "application/json",
                 "Authorization": `Bearer ${accessToken}`
              },
-            body: JSON.stringify({ waId, executiveId }),
+            body: JSON.stringify({ waId, executiveId, executiveName }),
         });
         if (!res.ok) throw new Error("No se pudo asignar el chat");
         return res.json();
