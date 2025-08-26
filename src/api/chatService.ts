@@ -201,3 +201,20 @@ export async function takeChats(waId: string, executiveId: number, executiveName
         throw new Error("No se pudo asignar el chat");
     }
 }
+
+export async function assignExecutiveAvailable(executiveId: number, executiveName: string) {
+    try {
+        const accessToken = getAccessToken();
+        const res = await fetch(`${VITE_API_WHATSAPP_URL}/maintainer/available_executive`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json",
+                "Authorization": `Bearer ${accessToken}`
+             },
+            body: JSON.stringify({ executiveId, executiveName }),
+        });
+        if (!res.ok) throw new Error("No se pudo asignar el chat");
+        return res.json();
+    } catch (error) {
+        throw new Error("No se pudo asignar el chat");
+    }
+}

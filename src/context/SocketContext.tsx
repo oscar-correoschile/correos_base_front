@@ -217,15 +217,15 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({
   const handleNewContact = React.useCallback((contact: any) => {
     setUnreadCounts(prev => {
       const newCounts = new Map(prev);
-      if (!newCounts.has(contact.waId)) {
-        newCounts.set(contact.waId, 1);
+      if (!newCounts.has(contact.data.waId)) {
+        newCounts.set(contact.data.waId, 1);
         setTotalUnreadCount(current => current + 1);
       }
       return newCounts;
     });
     
     setNewContacts(prev => {
-      const exists = prev.some(c => c.waId === contact.waId || c.id === contact.id);
+      const exists = prev.some(c => c.waId === contact.data.waId || c.id === contact.data.id);
       if (exists) {
         return prev;
       }

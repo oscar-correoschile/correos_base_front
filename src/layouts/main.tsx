@@ -36,7 +36,7 @@ import { fetchSession } from "@/queries/session";
 import { useNavigate } from "@tanstack/react-router";
 import { colors } from "@/styles/colors";
 import { useAuth } from "@/hooks/useAuth";
-import { executiveAvailable } from "@/api/chatService";
+import { assignExecutiveAvailable, executiveAvailable } from "@/api/chatService";
 
 const drawerWidth = 240;
 const drawerClosedWidth = 60;
@@ -153,7 +153,6 @@ export const LayoutComponent = ({
       const response = await executiveAvailable(session.executive.id, available);
 
       if (response.message && response.message.includes('successfully')) {
-
         if (response.result) {
           queryClientHook.setQueryData(['session'], (oldData: any) => {
             if (!oldData) return oldData;
@@ -165,11 +164,23 @@ export const LayoutComponent = ({
               }
             };
           });
+          await assignExecutiveAvailable(session.executive.id, session.executive.name);
+        await queryClientHook.invalidateQueries({ queryKey: ['waitingContacts'] });
+        await queryClientHook.invalidateQueries({ queryKey: ['openContacts'] });
+        await queryClient.refetchQueries({
+        queryKey: ["waitingContacts", session?.executive?.id],
+        exact: true,
+      });
+      
+      await queryClient.refetchQueries({
+        queryKey: ["contacts", session?.executive?.id],
+        exact: true,
+      });
         }
       } else {
         throw new Error('Error del servidor');
       }
-      
+
     } catch (error) {
       queryClientHook.setQueryData(['session'], (oldData: any) => {
         if (!oldData) return oldData;
@@ -183,7 +194,7 @@ export const LayoutComponent = ({
       });
     } finally {
       setIsUpdatingAvailability(false);
-      handleAvailabilityClose(); // ✅ Cerrar menú
+      handleAvailabilityClose(); // Cerrar menú
     }
   };
 
