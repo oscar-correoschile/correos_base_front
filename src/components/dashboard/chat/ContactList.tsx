@@ -291,7 +291,7 @@ const ContactList: React.FC<ContactListProps> = ({
         console.error('❌ Error removiendo listener:', error);
       }
     };
-  }, []);
+  }, [contacts]);
   
   // Crear un mapa de unreadCounts que combine datos iniciales + tiempo real
   const unreadCountsMap = React.useMemo(() => {
